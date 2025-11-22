@@ -3,6 +3,8 @@ import { Wand2, ArrowRight } from 'lucide-react';
 
 const CopyBuilder = ({ data, setData, onNext, brandVoice, activeBrand }) => {
     const [isGenerating, setIsGenerating] = useState(false);
+    const [lastGenerated, setLastGenerated] = useState(0);
+    const COOLDOWN_MS = 3000; // 3 seconds
 
     const updateData = (key, value) => {
         setData(prev => ({
@@ -12,6 +14,13 @@ const CopyBuilder = ({ data, setData, onNext, brandVoice, activeBrand }) => {
     };
 
     const handleGenerateCopy = async () => {
+        const now = Date.now();
+        if (now - lastGenerated < COOLDOWN_MS) {
+            alert(`Please wait ${Math.ceil((COOLDOWN_MS - (now - lastGenerated)) / 1000)} seconds before generating again`);
+            return;
+        }
+
+        setLastGenerated(now);
         setIsGenerating(true);
         // Simulate API call with brand voice context
         setTimeout(() => {
@@ -77,7 +86,7 @@ const CopyBuilder = ({ data, setData, onNext, brandVoice, activeBrand }) => {
                         : 'bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-lg transform hover:-translate-y-0.5'
                         }`}
                 >
-                    {isGenerating ? 'Generating Magic...' : "Generate Copy with Nicky's Playhouse"}
+                    {isGenerating ? 'Generating Magic...' : 'Generate Copy with AI'}
                 </button>
             </div>
 

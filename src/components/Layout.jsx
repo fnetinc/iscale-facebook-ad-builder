@@ -1,17 +1,77 @@
 import React, { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Image, Video, BarChart3, Menu, X, Settings, Briefcase } from 'lucide-react';
+import { LayoutDashboard, Image, Video, BarChart3, Menu, X, Settings, Briefcase, Package, Users, Target, Star, ChevronRight, FileImage } from 'lucide-react';
 
 const Layout = () => {
     const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+    const [collapsedSections, setCollapsedSections] = useState({ '/brands': true }); // Start with Brands collapsed
     const location = useLocation();
 
     const navItems = [
-        { path: '/', label: 'Image Ads', icon: Image },
+        { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+        { path: '/image-ads', label: 'Image Ads', icon: Image },
         { path: '/video-ads', label: 'Video Ads', icon: Video },
-        { path: '/brands', label: 'Brands', icon: Briefcase },
+        { path: '/winning-ads', label: 'Image Templates', icon: Star },
+        { path: '/generated-ads', label: 'Generated Ads', icon: FileImage },
+        { path: '/facebook-campaigns', label: 'Facebook Campaigns', icon: Target },
+        {
+            path: '/brands',
+            label: 'Brands',
+            icon: Briefcase,
+            children: [
+                { path: '/brands', label: 'All Brands', icon: Briefcase },
+                { path: '/products', label: 'Products', icon: Package },
+                { path: '/customer-profiles', label: 'Customer Profiles', icon: Users }
+            ]
+        },
         { path: '/reporting', label: 'Reporting', icon: BarChart3 },
     ];
+
+    const renderNavItem = (item, isChild = false) => {
+        const Icon = item.icon;
+        const isActive = location.pathname === item.path;
+        const hasChildren = item.children && item.children.length > 0;
+        const isParentActive = hasChildren && (isActive || item.children.some(child => location.pathname === child.path));
+        const isCollapsed = collapsedSections[item.path];
+
+        const toggleCollapse = (e) => {
+            if (hasChildren) {
+                e.preventDefault();
+                setCollapsedSections(prev => ({
+                    ...prev,
+                    [item.path]: !prev[item.path]
+                }));
+            }
+        };
+
+        return (
+            <div key={item.path}>
+                <Link
+                    to={item.path}
+                    onClick={toggleCollapse}
+                    className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors ${isActive || (hasChildren && isParentActive && !isChild)
+                        ? 'bg-blue-50 text-blue-600'
+                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                        } ${!isSidebarOpen && 'justify-center'} ${isChild ? 'ml-9 text-sm' : ''}`}
+                >
+                    <Icon size={isChild ? 18 : 20} />
+                    {isSidebarOpen && <span className="font-medium">{item.label}</span>}
+                    {hasChildren && isSidebarOpen && (
+                        <ChevronRight
+                            size={16}
+                            className={`ml-auto transition-transform ${!isCollapsed ? 'rotate-90' : ''}`}
+                        />
+                    )}
+                </Link>
+
+                {hasChildren && isSidebarOpen && !isCollapsed && (
+                    <div className="mt-1 space-y-1">
+                        {item.children.map(child => renderNavItem(child, true))}
+                    </div>
+                )}
+            </div>
+        );
+    };
 
     return (
         <div className="flex h-screen bg-gray-50">
@@ -34,24 +94,8 @@ const Layout = () => {
                     )}
                 </div>
 
-                <nav className="flex-1 py-6 px-3 space-y-1">
-                    {navItems.map((item) => {
-                        const Icon = item.icon;
-                        const isActive = location.pathname === item.path;
-                        return (
-                            <Link
-                                key={item.path}
-                                to={item.path}
-                                className={`flex items-center gap-3 px-3 py-3 rounded-lg transition-colors ${isActive
-                                        ? 'bg-blue-50 text-blue-600'
-                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
-                                    } ${!isSidebarOpen && 'justify-center'}`}
-                            >
-                                <Icon size={20} />
-                                {isSidebarOpen && <span className="font-medium">{item.label}</span>}
-                            </Link>
-                        );
-                    })}
+                <nav className="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
+                    {navItems.map(item => renderNavItem(item))}
                 </nav>
 
                 <div className="p-4 border-t border-gray-100">

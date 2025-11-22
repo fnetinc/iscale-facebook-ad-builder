@@ -2,12 +2,20 @@ import React, { useState } from 'react';
 import { useBrands } from '../context/BrandContext';
 import BrandForm from '../components/BrandForm';
 import { Plus, Edit2, Trash2, Briefcase, LayoutGrid, List } from 'lucide-react';
+import ConfirmationModal from '../components/ConfirmationModal';
 
 const Brands = () => {
     const { brands, addBrand, updateBrand, deleteBrand } = useBrands();
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [editingBrand, setEditingBrand] = useState(null);
-    const [viewMode, setViewMode] = useState('list'); // 'list' or 'grid'
+    const [viewMode, setViewMode] = useState(localStorage.getItem('preferred_view_mode') || 'list'); // 'list' or 'grid'
+
+    // Persist view mode preference
+    React.useEffect(() => {
+        localStorage.setItem('preferred_view_mode', viewMode);
+    }, [viewMode]);
+
+    const [brandToDelete, setBrandToDelete] = useState(null);
 
     const handleSave = (brandData) => {
         if (editingBrand) {
@@ -25,8 +33,13 @@ const Brands = () => {
     };
 
     const handleDelete = (id) => {
-        if (window.confirm('Are you sure you want to delete this brand?')) {
-            deleteBrand(id);
+        setBrandToDelete(id);
+    };
+
+    const confirmDelete = () => {
+        if (brandToDelete) {
+            deleteBrand(brandToDelete);
+            setBrandToDelete(null);
         }
     };
 
@@ -54,7 +67,7 @@ const Brands = () => {
                     </div>
                     <button
                         onClick={() => { setEditingBrand(null); setIsFormOpen(true); }}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-colors font-medium shadow-sm"
                     >
                         <Plus size={20} />
                         Add New Brand
@@ -204,6 +217,16 @@ const Brands = () => {
                     initialData={editingBrand}
                 />
             )}
+
+            <ConfirmationModal
+                isOpen={!!brandToDelete}
+                onClose={() => setBrandToDelete(null)}
+                onConfirm={confirmDelete}
+                title="Delete Brand"
+                message="Are you sure you want to delete this brand? This action cannot be undone."
+                confirmText="Delete"
+                isDestructive={true}
+            />
         </div>
     );
 };
