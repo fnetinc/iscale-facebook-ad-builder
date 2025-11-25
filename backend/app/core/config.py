@@ -1,0 +1,35 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class Settings:
+    PROJECT_NAME: str = "Facebook Ad Automation App"
+    API_V1_STR: str = "/api/v1"
+    
+    # Database - PostgreSQL Required
+    DATABASE_URL: str = os.getenv("DATABASE_URL")
+    
+    # Validate DATABASE_URL is set
+    if not DATABASE_URL:
+        raise ValueError(
+            "DATABASE_URL environment variable is required. "
+            "Please set it to your PostgreSQL connection string.\n"
+            "Example: postgresql://user:password@localhost:5432/video_ad_builder"
+        )
+    
+    # Validate that it's PostgreSQL
+    if not DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("postgres://"):
+        raise ValueError(
+            "DATABASE_URL must be a PostgreSQL connection string. "
+            f"Got: {DATABASE_URL.split(':')[0]}://...\n"
+            "SQLite is no longer supported. Please use PostgreSQL."
+        )
+    
+    # External APIs
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
+    FAL_AI_API_KEY: str = os.getenv("FAL_AI_API_KEY", "")
+    KIE_AI_API_KEY: str = os.getenv("KIE_AI_API_KEY", "")
+    FACEBOOK_ACCESS_TOKEN: str = os.getenv("FACEBOOK_ACCESS_TOKEN", "")
+
+settings = Settings()
