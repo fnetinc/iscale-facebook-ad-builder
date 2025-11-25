@@ -1,16 +1,110 @@
-# React + Vite
+# Facebook Ad Automation App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A full-stack application for automating Facebook ad creation, from competitor research to ad generation and launching.
 
-Currently, two official plugins are available:
+## Tech Stack
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Frontend**: React + Vite + TailwindCSS
+- **Backend**: Python FastAPI
+- **Database**: PostgreSQL (required)
 
-## React Compiler
+## Prerequisites
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- Node.js 18+ and npm
+- Python 3.11+
+- PostgreSQL 15+
 
-## Expanding the ESLint configuration
+## Database Setup
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Option 1: Local PostgreSQL
+
+1. Install PostgreSQL:
+   ```bash
+   # macOS
+   brew install postgresql@15
+   brew services start postgresql@15
+   
+   # Ubuntu/Debian
+   sudo apt-get install postgresql-15
+   sudo systemctl start postgresql
+   ```
+
+2. Create database:
+   ```bash
+   createdb video_ad_builder
+   ```
+
+3. Set environment variable:
+   ```bash
+   export DATABASE_URL="postgresql://localhost:5432/video_ad_builder"
+   ```
+
+### Option 2: Supabase
+
+1. Create a project at [supabase.com](https://supabase.com)
+2. Get your connection string from Project Settings → Database
+3. Set environment variable:
+   ```bash
+   export DATABASE_URL="postgresql://postgres:[password]@[host]:5432/postgres"
+   ```
+
+## Installation
+
+### Backend
+
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+
+# Copy environment template
+cp ../.env.example ../.env
+# Edit .env and set your DATABASE_URL and API keys
+
+# Initialize database
+python init_db.py
+
+# Start server
+uvicorn app.main:app --reload --port 8000
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The application will be available at:
+- Frontend: http://localhost:5173
+- Backend API: http://localhost:8000
+- API Docs: http://localhost:8000/api/v1/docs
+
+## Environment Variables
+
+See `.env.example` for all required environment variables. Key variables:
+
+- `DATABASE_URL`: PostgreSQL connection string (required)
+- `GEMINI_API_KEY`: Google Gemini API key for AI features
+- `VITE_FACEBOOK_ACCESS_TOKEN`: Facebook Marketing API access token
+- `VITE_FACEBOOK_AD_ACCOUNT_ID`: Your Facebook Ad Account ID
+
+## Troubleshooting
+
+### Database Connection Errors
+
+If you see "DATABASE_URL environment variable is required":
+1. Ensure `.env` file exists in project root
+2. Verify `DATABASE_URL` is set correctly
+3. Test PostgreSQL connection: `psql $DATABASE_URL`
+
+### SQLite No Longer Supported
+
+As of the latest version, SQLite is deprecated. PostgreSQL is required for all environments.
+
+## Documentation
+
+- [Specifications](./specifications.md) - Technical architecture and API documentation
+- [Supabase Setup](./SUPABASE_SETUP.md) - Supabase-specific configuration
