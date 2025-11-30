@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { useAuth } from './AuthContext';
 
 const BrandContext = createContext();
-const API_URL = '/api/v1';
+const API_URL = 'http://localhost:8000/api/v1';
 
 export const useBrands = () => {
     const context = useContext(BrandContext);
@@ -17,30 +18,58 @@ export const BrandProvider = ({ children }) => {
     const [activeBrand, setActiveBrand] = useState(null);
     const [loading, setLoading] = useState(true);
 
+    const { authFetch, isAuthenticated, loading: authLoading } = useAuth();
+
     // Load data from API
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
+        if (!isAuthenticated || authLoading) {
+            setLoading(false);
+            return;
+        }
+
         try {
             const [brandsRes, profilesRes] = await Promise.all([
-                fetch(`${API_URL}/brands`),
-                fetch(`${API_URL}/profiles`)
+                authFetch(`${API_URL}/brands`),
+                authFetch(`${API_URL}/profiles`)
             ]);
 
-            const brandsData = await brandsRes.json();
-            const profilesData = await profilesRes.json();
+            if (brandsRes.ok) {
+                const brandsData = await brandsRes.json();
+                setBrands(Array.isArray(brandsData) ? brandsData : []);
+            } else {
+                setBrands([]);
+            }
 
-            setBrands(brandsData);
-            setCustomerProfiles(profilesData);
+            if (profilesRes.ok) {
+                const profilesData = await profilesRes.json();
+                setCustomerProfiles(Array.isArray(profilesData) ? profilesData : []);
+            } else {
+                setCustomerProfiles([]);
+            }
         } catch (error) {
             console.error('Error loading data:', error);
+            setBrands([]);
+            setCustomerProfiles([]);
         } finally {
             setLoading(false);
         }
-    };
+    }, [authFetch, isAuthenticated, authLoading]);
 
-    // Initial data load
+    // Initial data load when authenticated
     useEffect(() => {
-        loadData();
-    }, []);
+        if (authLoading) {
+            // Still loading auth, wait
+            return;
+        }
+
+        if (isAuthenticated) {
+            loadData();
+        } else {
+            setBrands([]);
+            setCustomerProfiles([]);
+            setLoading(false);
+        }
+    }, [isAuthenticated, authLoading, loadData]);
 
     // Brand Management
     const addBrand = async (brand) => {
@@ -50,7 +79,7 @@ export const BrandProvider = ({ children }) => {
                 id: crypto.randomUUID()
             };
 
-            await fetch(`${API_URL}/brands`, {
+            await authFetch(`${API_URL}/brands`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newBrand)
@@ -65,7 +94,7 @@ export const BrandProvider = ({ children }) => {
 
     const updateBrand = async (id, updatedBrand) => {
         try {
-            await fetch(`${API_URL}/brands/${id}`, {
+            await authFetch(`${API_URL}/brands/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(updatedBrand)
@@ -80,7 +109,7 @@ export const BrandProvider = ({ children }) => {
 
     const deleteBrand = async (id) => {
         try {
-            await fetch(`${API_URL}/brands/${id}`, {
+            await authFetch(`${API_URL}/brands/${id}`, {
                 method: 'DELETE'
             });
 
@@ -151,7 +180,7 @@ export const BrandProvider = ({ children }) => {
                 id: crypto.randomUUID()
             };
 
-            await fetch(`${API_URL}/profiles`, {
+            await authFetch(`${API_URL}/profiles`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(newProfile)
@@ -167,7 +196,7 @@ export const BrandProvider = ({ children }) => {
 
     const updateProfile = async (id, updatedProfile) => {
         try {
-            await fetch(`${API_URL}/profiles/${id}`, {
+            await authFetch(`${API_URL}/profiles/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(updatedProfile)
@@ -182,7 +211,7 @@ export const BrandProvider = ({ children }) => {
 
     const deleteProfile = async (id) => {
         try {
-            await fetch(`${API_URL}/profiles/${id}`, {
+            await authFetch(`${API_URL}/profiles/${id}`, {
                 method: 'DELETE'
             });
 
@@ -233,6 +262,7 @@ export const BrandProvider = ({ children }) => {
             activeBrand,
             setActiveBrand,
             loading,
+            loadData,
             addBrand,
             updateBrand,
             deleteBrand,

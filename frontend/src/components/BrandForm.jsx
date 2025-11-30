@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
 import { X, Plus, Trash2, Link as LinkIcon, Unlink } from 'lucide-react';
 import { useBrands } from '../context/BrandContext';
+import { useToast } from '../context/ToastContext';
 import { validateBrandName, validateHexColor, validateProductName, validateProductDescription, validateBrandVoice, validateTextInput } from '../utils/validation';
 
 const BrandForm = ({ onClose, onSave, initialData = null }) => {
     const { customerProfiles, brands } = useBrands();
+    const { showError } = useToast();
 
     // Get all products from all brands
     const allProducts = brands.flatMap(brand =>
@@ -26,7 +28,6 @@ const BrandForm = ({ onClose, onSave, initialData = null }) => {
 
     const [selectedProductId, setSelectedProductId] = useState('');
     const [selectedProfileId, setSelectedProfileId] = useState('');
-    const [error, setError] = useState('');
 
     const handleLinkProduct = () => {
         if (selectedProductId && !formData.products.find(p => p.id === selectedProductId)) {
@@ -85,10 +86,9 @@ const BrandForm = ({ onClose, onSave, initialData = null }) => {
                 products: formData.products || [],
                 profileIds: formData.profileIds || []
             };
-            setError('');
             onSave(validatedData);
         } catch (err) {
-            setError(err.message);
+            showError(err.message);
         }
     };
 
@@ -105,13 +105,6 @@ const BrandForm = ({ onClose, onSave, initialData = null }) => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                    {/* Error Display */}
-                    {error && (
-                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
-                            {error}
-                        </div>
-                    )}
-
                     {/* Basic Info */}
                     <div className="space-y-4">
                         <div>

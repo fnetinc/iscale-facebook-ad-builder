@@ -1,15 +1,16 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 import { validateTextInput } from '../utils/validation';
 
 const CustomerProfileForm = ({ onClose, onSave, initialData = null }) => {
+    const { showError } = useToast();
     const [formData, setFormData] = useState(initialData || {
         name: '',
         demographics: '',
         painPoints: '',
         goals: ''
     });
-    const [error, setError] = useState('');
 
     const handleSubmit = (e) => {
         e.preventDefault();
@@ -22,10 +23,9 @@ const CustomerProfileForm = ({ onClose, onSave, initialData = null }) => {
                 goals: validateTextInput(formData.goals, 'Goals', 1000)
             };
 
-            setError('');
             onSave(validatedData);
         } catch (err) {
-            setError(err.message);
+            showError(err.message);
         }
     };
 
@@ -42,12 +42,6 @@ const CustomerProfileForm = ({ onClose, onSave, initialData = null }) => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                    {error && (
-                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                            {error}
-                        </div>
-                    )}
-
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Profile Name</label>
                         <input

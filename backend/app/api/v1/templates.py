@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
-from app.models import WinningAd as WinningAdModel
+from app.models import WinningAd as WinningAdModel, User
 from app.schemas.template import WinningAd
+from app.core.deps import get_current_active_user, require_permission
 import uuid
 
 router = APIRouter()
@@ -13,7 +14,8 @@ def read_winning_ads(
     search: Optional[str] = None,
     category: Optional[str] = None,
     style: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     query = db.query(WinningAdModel)
     
@@ -33,7 +35,10 @@ def read_winning_ads(
     return query.all()
 
 @router.get("/filters")
-def read_template_filters(db: Session = Depends(get_db)):
+def read_template_filters(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     categories = db.query(WinningAdModel.template_category).distinct().filter(WinningAdModel.template_category != None).all()
     styles = db.query(WinningAdModel.design_style).distinct().filter(WinningAdModel.design_style != None).all()
     
@@ -43,7 +48,11 @@ def read_template_filters(db: Session = Depends(get_db)):
     }
 
 @router.get("/{id}/preview", response_model=WinningAd)
-def read_template_preview(id: str, db: Session = Depends(get_db)):
+def read_template_preview(
+    id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     template = db.query(WinningAdModel).filter(WinningAdModel.id == id).first()
     if not template:
         raise HTTPException(status_code=404, detail="Template not found")
@@ -60,7 +69,8 @@ UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 @router.post("/upload")
 async def upload_winning_ad(
     images: List[UploadFile] = File(...),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("templates:write"))
 ):
     saved_ads = []
     for image in images:

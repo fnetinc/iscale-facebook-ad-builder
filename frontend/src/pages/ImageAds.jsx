@@ -1,4 +1,5 @@
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import React, { useState, useEffect } from 'react';
 import { ChevronRight, ChevronLeft, Check, Briefcase, Package, Users, Image, Hash, FileText, Sparkles, Download, ChevronDown, ChevronUp, Settings, CheckCircle2, ArrowRight } from 'lucide-react';
 import { useBrands } from '../context/BrandContext';
@@ -8,9 +9,12 @@ import ProductSelectionStep from '../components/steps/ProductSelectionStep';
 import ProfileSelectionStep from '../components/steps/ProfileSelectionStep';
 import StyleSelector from '../components/StyleSelector';
 
+const API_URL = 'http://localhost:8000/api/v1';
+
 export default function ImageAds() {
     const { brands, customerProfiles } = useBrands();
     const { showError } = useToast();
+    const { authFetch } = useAuth();
     const [currentStep, setCurrentStep] = useState(1);
     const [generating, setGenerating] = useState(false);
     const [generatedCopy, setGeneratedCopy] = useState(null);
@@ -130,7 +134,7 @@ export default function ImageAds() {
     const handleGenerate = async () => {
         setGenerating(true);
         try {
-            const response = await fetch('/api/v1/copy-generation/generate', {
+            const response = await authFetch(`${API_URL}/copy-generation/generate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(wizardData)
@@ -156,7 +160,7 @@ export default function ImageAds() {
         setSelectedCopy(copy);
         setGenerating(true);
         try {
-            const response = await fetch('/api/v1/generated-ads/generate-image', {
+            const response = await authFetch(`${API_URL}/generated-ads/generate-image`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -209,7 +213,7 @@ export default function ImageAds() {
                     adBundleId: img.adBundleId
                 }));
 
-                const saveResponse = await fetch('/api/v1/generated-ads/batch', {
+                const saveResponse = await authFetch(`${API_URL}/generated-ads/batch`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ads: adsToSave })
@@ -448,6 +452,7 @@ export default function ImageAds() {
                         onProceed={handleImageGeneration}
                         customImagePrompt={customImagePrompt}
                         setCustomImagePrompt={setCustomImagePrompt}
+                        authFetch={authFetch}
                     />
                 )}
 
@@ -998,7 +1003,7 @@ function ReviewItem({ label, value, icon: Icon }) {
     );
 }
 
-function CopySelectionStep({ generatedCopy, wizardData, onBack, onRegenerate, isRegenerating, onProceed, customImagePrompt, setCustomImagePrompt }) {
+function CopySelectionStep({ generatedCopy, wizardData, onBack, onRegenerate, isRegenerating, onProceed, customImagePrompt, setCustomImagePrompt, authFetch }) {
     const [selectedIndex, setSelectedIndex] = useState(0);
     const [editedCopy, setEditedCopy] = useState(null);
     const [regeneratingField, setRegeneratingField] = useState(null);
@@ -1136,7 +1141,7 @@ Style: ${designStyle}`);
     const handleRegenerateField = async (field) => {
         setRegeneratingField(field);
         try {
-            const response = await fetch('/api/v1/copy-generation/regenerate-field', {
+            const response = await authFetch(`${API_URL}/copy-generation/regenerate-field`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -1156,7 +1161,6 @@ Style: ${designStyle}`);
             handleEdit(field, data.newValue);
         } catch (error) {
             console.error('Regeneration error:', error);
-            showError('Failed to regenerate field');
         } finally {
             setRegeneratingField(null);
         }

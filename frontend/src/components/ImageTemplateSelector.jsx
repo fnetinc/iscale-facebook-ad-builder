@@ -1,9 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { X, Filter, Grid, List, Sparkles, Trash2, AlertTriangle } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
+
+const API_URL = 'http://localhost:8000/api/v1';
 
 export default function ImageTemplateSelector({ onSelect, onClose, embedded = false }) {
     const { showError } = useToast();
+    const { authFetch } = useAuth();
     const [templates, setTemplates] = useState([]);
     const [filters, setFilters] = useState({ categories: [], styles: [] });
     const [selectedCategory, setSelectedCategory] = useState('');
@@ -32,9 +36,11 @@ export default function ImageTemplateSelector({ onSelect, onClose, embedded = fa
 
     const fetchFilters = async () => {
         try {
-            const response = await fetch('/api/v1/templates/filters');
-            const data = await response.json();
-            setFilters(data);
+            const response = await authFetch(`${API_URL}/templates/filters`);
+            if (response.ok) {
+                const data = await response.json();
+                setFilters(data);
+            }
         } catch (error) {
             console.error('Error fetching filters:', error);
         }
@@ -47,11 +53,16 @@ export default function ImageTemplateSelector({ onSelect, onClose, embedded = fa
             if (selectedCategory) params.append('category', selectedCategory);
             if (selectedStyle) params.append('style', selectedStyle);
 
-            const response = await fetch(`/api/v1/templates?${params}`);
-            const data = await response.json();
-            setTemplates(sortTemplates(data, sortBy));
+            const response = await authFetch(`${API_URL}/templates/?${params}`);
+            if (response.ok) {
+                const data = await response.json();
+                setTemplates(sortTemplates(Array.isArray(data) ? data : [], sortBy));
+            } else {
+                setTemplates([]);
+            }
         } catch (error) {
             console.error('Error fetching templates:', error);
+            setTemplates([]);
         } finally {
             setLoading(false);
         }
@@ -60,9 +71,13 @@ export default function ImageTemplateSelector({ onSelect, onClose, embedded = fa
     const handleTemplateSelect = async (template) => {
         // Fetch full preview data
         try {
-            const response = await fetch(`/api/v1/templates/${template.id}/preview`);
-            const preview = await response.json();
-            onSelect(preview);
+            const response = await authFetch(`${API_URL}/templates/${template.id}/preview`);
+            if (response.ok) {
+                const preview = await response.json();
+                onSelect(preview);
+            } else {
+                onSelect(template);
+            }
         } catch (error) {
             console.error('Error fetching template preview:', error);
             onSelect(template);
@@ -75,6 +90,7 @@ export default function ImageTemplateSelector({ onSelect, onClose, embedded = fa
     };
 
     const sortTemplates = (templateList, sortOption) => {
+        if (!Array.isArray(templateList)) return [];
         const sorted = [...templateList];
         switch (sortOption) {
             case 'newest':
@@ -120,7 +136,7 @@ export default function ImageTemplateSelector({ onSelect, onClose, embedded = fa
 
     const handleDelete = async () => {
         try {
-            const response = await fetch('/api/v1/templates/bulk-delete', {
+            const response = await authFetch(`${API_URL}/templates/bulk-delete`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
@@ -199,7 +215,7 @@ export default function ImageTemplateSelector({ onSelect, onClose, embedded = fa
                         className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent capitalize"
                     >
                         <option value="">All Categories</option>
-                        {filters.categories.map(cat => (
+                        {filters.categories && filters.categories.map(cat => (
                             <option key={cat} value={cat} className="capitalize">{cat}</option>
                         ))}
                     </select>
@@ -211,7 +227,7 @@ export default function ImageTemplateSelector({ onSelect, onClose, embedded = fa
                         className="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                     >
                         <option value="">All Styles</option>
-                        {filters.styles.map(style => (
+                        {filters.styles && filters.styles.map(style => (
                             <option key={style} value={style}>{style}</option>
                         ))}
                     </select>

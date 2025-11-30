@@ -1,7 +1,19 @@
 import React from 'react';
 import { Check } from 'lucide-react';
 
-export default function BrandSelectionStep({ brands, selectedBrand, onSelect }) {
+export default function BrandSelectionStep({ brands = [], selectedBrand, onSelect }) {
+    if (!brands || brands.length === 0) {
+        return (
+            <div>
+                <h3 className="text-xl font-bold mb-4">Select Your Brand</h3>
+                <p className="text-gray-600 mb-6">Choose the brand for this ad campaign</p>
+                <div className="p-8 text-center text-gray-500 bg-gray-50 rounded-xl border border-gray-200">
+                    No brands available. Please create a brand first.
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div>
             <h3 className="text-xl font-bold mb-4">Select Your Brand</h3>

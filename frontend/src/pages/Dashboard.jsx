@@ -1,8 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { LayoutDashboard, Image, Video, Star, TrendingUp, Zap, Wand2, Package, ShoppingBag } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+
+const API_URL = 'http://localhost:8000/api/v1';
 
 export default function Dashboard() {
+    const { authFetch } = useAuth();
     const [statsData, setStatsData] = useState({
         brands_count: 0,
         products_count: 0,
@@ -14,7 +18,7 @@ export default function Dashboard() {
     useEffect(() => {
         const fetchStats = async () => {
             try {
-                const response = await fetch('/api/v1/dashboard/stats');
+                const response = await authFetch(`${API_URL}/dashboard/stats`);
                 if (response.ok) {
                     const data = await response.json();
                     setStatsData(data);
@@ -25,7 +29,7 @@ export default function Dashboard() {
         };
 
         fetchStats();
-    }, []);
+    }, [authFetch]);
 
     const stats = [
         { label: 'Total Campaigns', value: statsData.campaigns_count, icon: TrendingUp, color: 'bg-amber-500' },

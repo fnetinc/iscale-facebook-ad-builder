@@ -47,8 +47,10 @@ async def startup_event():
 
 
 # Include Routers
-from app.api.v1 import brands, products, research, generated_ads, templates, facebook, uploads, dashboard, copy_generation, profiles, ad_remix, prompts, ad_styles
+from app.api.v1 import brands, products, research, generated_ads, templates, facebook, uploads, dashboard, copy_generation, profiles, ad_remix, prompts, ad_styles, auth, users
 
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(users.router, prefix="/api/v1/users", tags=["users"])
 app.include_router(brands.router, prefix="/api/v1/brands", tags=["brands"])
 app.include_router(products.router, prefix="/api/v1/products", tags=["products"])
 app.include_router(research.router, prefix="/api/v1/research", tags=["research"])

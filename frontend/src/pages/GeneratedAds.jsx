@@ -1,12 +1,16 @@
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import React, { useState, useEffect, useMemo } from 'react';
 import { Download, Trash2, Search, Filter, CheckSquare, Square, FileDown, ExternalLink, FileText, Image, LayoutGrid, List } from 'lucide-react';
 import { useBrands } from '../context/BrandContext';
 
+const API_URL = 'http://localhost:8000/api/v1';
+
 export default function GeneratedAds() {
     // Force rebuild
     const { brands } = useBrands();
-    const { showError, showWarning } = useToast();
+    const { showError, showWarning, showSuccess } = useToast();
+    const { authFetch } = useAuth();
     const [ads, setAds] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedBundles, setSelectedBundles] = useState(new Set());
@@ -38,11 +42,16 @@ export default function GeneratedAds() {
             const params = new URLSearchParams();
             if (selectedBrand) params.append('brand_id', selectedBrand);
 
-            const response = await fetch(`/api/v1/generated-ads?${params}`);
-            const data = await response.json();
-            setAds(data);
+            const response = await authFetch(`${API_URL}/generated-ads?${params}`);
+            if (response.ok) {
+                const data = await response.json();
+                setAds(Array.isArray(data) ? data : []);
+            } else {
+                setAds([]);
+            }
         } catch (error) {
             console.error('Error fetching ads:', error);
+            setAds([]);
         } finally {
             setLoading(false);
         }
@@ -128,7 +137,7 @@ export default function GeneratedAds() {
             // Delete all ads in the bundle
             const deletePromises = bundleAds.map(ad => {
                 console.log(`Deleting ad ${ad.id}`);
-                return fetch(`/api/v1/generated-ads/${ad.id}`, {
+                return authFetch(`${API_URL}/generated-ads/${ad.id}`, {
                     method: 'DELETE'
                 }).then(response => {
                     if (!response.ok) {
@@ -182,7 +191,7 @@ export default function GeneratedAds() {
             .map(ad => ad.id);
 
         try {
-            const response = await fetch('/api/v1/generated-ads/export-csv', {
+            const response = await authFetch(`${API_URL}/generated-ads/export-csv`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ ids: selectedAdIds })

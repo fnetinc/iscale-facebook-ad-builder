@@ -1,14 +1,32 @@
 // Facebook Marketing API Integration Service
-// Now proxies through our backend
+// Now proxies through our backend with authentication
 
-const API_BASE_URL = '/api/v1/facebook';
+const API_BASE_URL = 'http://localhost:8000/api/v1/facebook';
+
+// Helper to get auth headers from localStorage
+const getAuthHeaders = () => {
+    const token = localStorage.getItem('accessToken');
+    return token ? { 'Authorization': `Bearer ${token}` } : {};
+};
+
+// Authenticated fetch wrapper
+const authFetch = async (url, options = {}) => {
+    const response = await fetch(url, {
+        ...options,
+        headers: {
+            ...options.headers,
+            ...getAuthHeaders(),
+        },
+    });
+    return response;
+};
 
 /**
  * Get all ad accounts accessible by the access token
  */
 export async function getAdAccounts() {
     try {
-        const response = await fetch(`${API_BASE_URL}/accounts`);
+        const response = await authFetch(`${API_BASE_URL}/accounts`);
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Failed to fetch ad accounts');
@@ -47,7 +65,7 @@ export async function getCampaigns(adAccountId) {
         // Backend service currently fetches all campaigns for the connected account
         // It doesn't filter by adAccountId in the service call yet, but assumes the env var account
         // For now, we'll just call the endpoint
-        const response = await fetch(`${API_BASE_URL}/campaigns?ad_account_id=${adAccountId}`);
+        const response = await authFetch(`${API_BASE_URL}/campaigns?ad_account_id=${adAccountId}`);
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Failed to fetch campaigns');
@@ -76,7 +94,7 @@ export async function getCampaigns(adAccountId) {
  */
 export async function getPixels(adAccountId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/pixels?ad_account_id=${adAccountId}`);
+        const response = await authFetch(`${API_BASE_URL}/pixels?ad_account_id=${adAccountId}`);
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Failed to fetch pixels');
@@ -101,7 +119,7 @@ export async function getPixels(adAccountId) {
  */
 export async function getPages(adAccountId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/pages`);
+        const response = await authFetch(`${API_BASE_URL}/pages`);
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Failed to fetch pages');
@@ -130,7 +148,7 @@ export const getAdSets = async (campaignId, adAccountId) => {
             url += `ad_account_id=${adAccountId}`;
         }
 
-        const response = await fetch(url);
+        const response = await authFetch(url);
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Failed to fetch ad sets');
@@ -180,8 +198,7 @@ export async function uploadImageToFacebook(imageUrl, adAccountId) {
             formData.append('file', blob, filename);
 
             // 3. Upload to our backend
-            // Note: API_BASE_URL is '/api/v1/facebook', so we need to go up one level to '/api/v1/uploads'
-            const uploadResponse = await fetch('/api/v1/uploads/', {
+            const uploadResponse = await authFetch('http://localhost:8000/api/v1/uploads/', {
                 method: 'POST',
                 body: formData
             });
@@ -199,7 +216,7 @@ export async function uploadImageToFacebook(imageUrl, adAccountId) {
             finalImageUrl = uploadResult.url.startsWith('/') ? uploadResult.url.substring(1) : uploadResult.url;
         }
 
-        const response = await fetch(`${API_BASE_URL}/upload-image?ad_account_id=${adAccountId}`, {
+        const response = await authFetch(`${API_BASE_URL}/upload-image?ad_account_id=${adAccountId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -225,7 +242,7 @@ export async function uploadImageToFacebook(imageUrl, adAccountId) {
  */
 export async function createFacebookCampaign(campaignData, adAccountId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/campaigns?ad_account_id=${adAccountId}`, {
+        const response = await authFetch(`${API_BASE_URL}/campaigns?ad_account_id=${adAccountId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -263,7 +280,7 @@ export async function createFacebookAdSet(adsetData, campaignId, adAccountId, bu
             targeting: adsetData.targeting
         };
 
-        const response = await fetch(`${API_BASE_URL}/adsets?ad_account_id=${adAccountId}`, {
+        const response = await authFetch(`${API_BASE_URL}/adsets?ad_account_id=${adAccountId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -298,7 +315,7 @@ export async function createFacebookCreative(creativeData, imageHash, pageId, ad
             website_url: creativeData.websiteUrl
         };
 
-        const response = await fetch(`${API_BASE_URL}/creatives?ad_account_id=${adAccountId}`, {
+        const response = await authFetch(`${API_BASE_URL}/creatives?ad_account_id=${adAccountId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -330,7 +347,7 @@ export async function createFacebookAd(adData, adsetId, creativeId, adAccountId)
             creative_id: creativeId
         };
 
-        const response = await fetch(`${API_BASE_URL}/ads?ad_account_id=${adAccountId}`, {
+        const response = await authFetch(`${API_BASE_URL}/ads?ad_account_id=${adAccountId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -356,7 +373,7 @@ export async function createFacebookAd(adData, adsetId, creativeId, adAccountId)
  */
 export async function searchLocations(query, type = 'city', adAccountId) {
     try {
-        const response = await fetch(`${API_BASE_URL}/locations/search?q=${encodeURIComponent(query)}&type=${type}&ad_account_id=${adAccountId}`);
+        const response = await authFetch(`${API_BASE_URL}/locations/search?q=${encodeURIComponent(query)}&type=${type}&ad_account_id=${adAccountId}`);
         if (!response.ok) {
             const error = await response.json();
             throw new Error(error.detail || 'Failed to search locations');

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Text, JSON, Table
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, Text, JSON, Table, Boolean
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.database import Base
@@ -6,6 +6,24 @@ import uuid
 
 def generate_uuid():
     return str(uuid.uuid4())
+
+# Many-to-Many relationship table for User <-> Role
+user_roles = Table(
+    'user_roles',
+    Base.metadata,
+    Column('user_id', String, ForeignKey('users.id', ondelete='CASCADE'), primary_key=True),
+    Column('role_id', String, ForeignKey('roles.id', ondelete='CASCADE'), primary_key=True),
+    Column('created_at', DateTime(timezone=True), server_default=func.now())
+)
+
+# Many-to-Many relationship table for Role <-> Permission
+role_permissions = Table(
+    'role_permissions',
+    Base.metadata,
+    Column('role_id', String, ForeignKey('roles.id', ondelete='CASCADE'), primary_key=True),
+    Column('permission_id', String, ForeignKey('permissions.id', ondelete='CASCADE'), primary_key=True),
+    Column('created_at', DateTime(timezone=True), server_default=func.now())
+)
 
 # Many-to-Many relationship table for Brand <-> CustomerProfile
 brand_profiles = Table(
@@ -15,6 +33,69 @@ brand_profiles = Table(
     Column('profile_id', String, ForeignKey('customer_profiles.id', ondelete='CASCADE'), primary_key=True),
     Column('created_at', DateTime(timezone=True), server_default=func.now())
 )
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    email = Column(String, unique=True, nullable=False, index=True)
+    hashed_password = Column(String, nullable=False)
+    name = Column(String, nullable=True)
+    is_active = Column(Boolean, default=True)
+    is_superuser = Column(Boolean, default=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    roles = relationship("Role", secondary=user_roles, back_populates="users")
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
+
+    def has_permission(self, permission_name: str) -> bool:
+        """Check if user has a specific permission through any of their roles"""
+        if self.is_superuser:
+            return True
+        for role in self.roles:
+            for permission in role.permissions:
+                if permission.name == permission_name:
+                    return True
+        return False
+
+    def has_role(self, role_name: str) -> bool:
+        """Check if user has a specific role"""
+        if self.is_superuser:
+            return True
+        return any(role.name == role_name for role in self.roles)
+
+class Role(Base):
+    __tablename__ = "roles"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, unique=True, nullable=False)
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    users = relationship("User", secondary=user_roles, back_populates="roles")
+    permissions = relationship("Permission", secondary=role_permissions, back_populates="roles")
+
+class Permission(Base):
+    __tablename__ = "permissions"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    name = Column(String, unique=True, nullable=False)  # e.g., "brands:create", "ads:delete"
+    description = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    roles = relationship("Role", secondary=role_permissions, back_populates="permissions")
+
+class RefreshToken(Base):
+    __tablename__ = "refresh_tokens"
+
+    id = Column(String, primary_key=True, default=generate_uuid)
+    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token = Column(String, unique=True, nullable=False, index=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", back_populates="refresh_tokens")
 
 class Brand(Base):
     __tablename__ = "brands"

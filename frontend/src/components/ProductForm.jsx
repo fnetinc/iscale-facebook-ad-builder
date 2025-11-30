@@ -2,19 +2,21 @@ import React, { useState, useRef } from 'react';
 import { X, Upload, Loader } from 'lucide-react';
 import { useBrands } from '../context/BrandContext';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import { validateProductName, validateProductDescription } from '../utils/validation';
 
+const API_URL = 'http://localhost:8000/api/v1';
 
 const ProductForm = ({ onClose, onSave, initialData = null }) => {
     const { brands } = useBrands();
     const { showSuccess, showError } = useToast();
+    const { authFetch } = useAuth();
     const [formData, setFormData] = useState(initialData || {
         name: '',
         description: '',
         brandId: '',
         product_shots: []
     });
-    const [error, setError] = useState('');
     const [uploading, setUploading] = useState(false);
     const [saving, setSaving] = useState(false);
     const fileInputRef = useRef(null);
@@ -38,12 +40,10 @@ const ProductForm = ({ onClose, onSave, initialData = null }) => {
                 product_shots: formData.product_shots || []
             };
 
-            setError('');
             await onSave(validatedData);
             showSuccess('Product saved successfully');
             onClose();
         } catch (err) {
-            setError(err.message);
             showError(err.message);
         } finally {
             setSaving(false);
@@ -73,7 +73,7 @@ const ProductForm = ({ onClose, onSave, initialData = null }) => {
                 const uploadData = new FormData();
                 uploadData.append('file', file);
 
-                const response = await fetch('/api/v1/uploads/', {
+                const response = await authFetch(`${API_URL}/uploads/`, {
                     method: 'POST',
                     body: uploadData
                 });
@@ -121,12 +121,6 @@ const ProductForm = ({ onClose, onSave, initialData = null }) => {
                 </div>
 
                 <form onSubmit={handleSubmit} className="p-6 space-y-6">
-                    {error && (
-                        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
-                            {error}
-                        </div>
-                    )}
-
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Brand</label>
                         <select
