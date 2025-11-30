@@ -5,7 +5,7 @@ import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import { validateProductName, validateProductDescription } from '../utils/validation';
 
-const API_URL = 'http://localhost:8000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 const ProductForm = ({ onClose, onSave, initialData = null }) => {
     const { brands } = useBrands();

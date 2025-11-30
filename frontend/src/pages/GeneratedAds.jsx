@@ -4,7 +4,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Download, Trash2, Search, Filter, CheckSquare, Square, FileDown, ExternalLink, FileText, Image, LayoutGrid, List } from 'lucide-react';
 import { useBrands } from '../context/BrandContext';
 
-const API_URL = 'http://localhost:8000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 export default function GeneratedAds() {
     // Force rebuild

@@ -5,7 +5,7 @@ import { ChevronRight, Plus, Trash2, Loader } from 'lucide-react';
 import { useCampaign } from '../context/CampaignContext';
 import { createCompleteAd, createFacebookCampaign, createFacebookAdSet } from '../lib/facebookApi';
 
-const API_URL = 'http://localhost:8000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 const BulkAdCreation = ({ onNext, onBack }) => {
     const { showWarning, showError } = useToast();
