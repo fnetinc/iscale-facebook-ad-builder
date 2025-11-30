@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database import get_db
-from app.models import GeneratedAd
+from app.models import GeneratedAd, User
+from app.core.deps import get_current_active_user, require_permission
 from fastapi.responses import StreamingResponse
 import io
 import csv
@@ -145,7 +146,10 @@ async def download_and_save_image(image_url: str, prefix: str = "generated") -> 
         return image_url
 
 @router.post("/generate-image")
-async def generate_image(request: ImageGenerationRequest):
+async def generate_image(
+    request: ImageGenerationRequest,
+    current_user: User = Depends(require_permission("ads:write"))
+):
     """Generate ad images using Fal.ai (with mock fallback)"""
     
     images = []
@@ -239,7 +243,8 @@ async def generate_image(request: ImageGenerationRequest):
 @router.get("/")
 def get_generated_ads(
     brand_id: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
 ):
     """Get all generated ads, optionally filtered by brand"""
     query = db.query(GeneratedAd)
@@ -266,7 +271,11 @@ def get_generated_ads(
     } for ad in ads]
 
 @router.delete("/{ad_id}")
-def delete_generated_ad(ad_id: str, db: Session = Depends(get_db)):
+def delete_generated_ad(
+    ad_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("ads:delete"))
+):
     """Delete a generated ad by ID"""
     ad = db.query(GeneratedAd).filter(GeneratedAd.id == ad_id).first()
     
@@ -279,7 +288,11 @@ def delete_generated_ad(ad_id: str, db: Session = Depends(get_db)):
     return {"message": "Ad deleted successfully"}
 
 @router.post("/export-csv")
-def export_ads_csv(request: dict, db: Session = Depends(get_db)):
+def export_ads_csv(
+    request: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     """Export selected ads to CSV"""
     ad_ids = request.get("ids", [])
     
@@ -321,7 +334,11 @@ def export_ads_csv(request: dict, db: Session = Depends(get_db)):
     )
 
 @router.post("/batch")
-def batch_save_ads(request: BatchSaveRequest, db: Session = Depends(get_db)):
+def batch_save_ads(
+    request: BatchSaveRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("ads:write"))
+):
     """Batch save generated ads"""
     
     saved_ads = []

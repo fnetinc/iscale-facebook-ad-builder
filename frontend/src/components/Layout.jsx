@@ -1,11 +1,23 @@
 import React, { useState } from 'react';
-import { Link, useLocation, Outlet } from 'react-router-dom';
-import { LayoutDashboard, Package, Users, Video, Wand2, Settings, LogOut, Image, ShoppingBag, Target, ChevronLeft, ChevronRight, FileImage, Search, ChevronDown } from 'lucide-react';
+import { Link, useLocation, Outlet, useNavigate } from 'react-router-dom';
+import { LayoutDashboard, Package, Users, Video, Wand2, Settings, LogOut, Image, ShoppingBag, Target, ChevronLeft, ChevronRight, FileImage, Search, ChevronDown, UserCog } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { useToast } from '../context/ToastContext';
 
 export default function Layout() {
     const location = useLocation();
+    const navigate = useNavigate();
+    const { user, logout, hasRole } = useAuth();
+    const { showSuccess } = useToast();
     const [expandedMenus, setExpandedMenus] = useState({ Brands: false });
-    const [isCollapsed, setIsCollapsed] = useState(false); // Added isCollapsed state
+    const [isCollapsed, setIsCollapsed] = useState(false);
+    const [showUserMenu, setShowUserMenu] = useState(false);
+
+    const handleLogout = async () => {
+        await logout();
+        showSuccess('Logged out successfully');
+        navigate('/login');
+    };
 
     const menuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
@@ -130,6 +142,25 @@ export default function Layout() {
                 </nav>
 
                 <div className="p-4 border-t border-amber-100">
+                    {/* User Management - Admin Only */}
+                    {hasRole('admin') && (
+                        <Link
+                            to="/users"
+                            className={`flex items-center gap-3 px-4 py-3 w-full rounded-xl transition-colors group ${
+                                location.pathname === '/users'
+                                    ? 'bg-amber-100 text-amber-900 font-medium shadow-sm'
+                                    : 'text-gray-600 hover:bg-amber-50 hover:text-amber-800'
+                            } ${isCollapsed ? 'justify-center px-2' : ''}`}
+                            title={isCollapsed ? 'User Management' : ''}
+                        >
+                            <UserCog size={20} className={`flex-shrink-0 ${
+                                location.pathname === '/users'
+                                    ? 'text-amber-600'
+                                    : 'text-gray-400 group-hover:text-amber-600'
+                            }`} />
+                            {!isCollapsed && <span className="whitespace-nowrap overflow-hidden">User Management</span>}
+                        </Link>
+                    )}
                     <Link
                         to="/settings"
                         className={`flex items-center gap-3 px-4 py-3 w-full rounded-xl transition-colors group ${
@@ -146,7 +177,19 @@ export default function Layout() {
                         }`} />
                         {!isCollapsed && <span className="whitespace-nowrap overflow-hidden">Settings</span>}
                     </Link>
+
+                    {/* User Info */}
+                    {!isCollapsed && user && (
+                        <div className="px-4 py-3 mt-2 bg-amber-50 rounded-xl">
+                            <div className="text-sm font-medium text-amber-900 truncate">
+                                {user.name || user.email}
+                            </div>
+                            <div className="text-xs text-amber-600 truncate">{user.email}</div>
+                        </div>
+                    )}
+
                     <button
+                        onClick={handleLogout}
                         className={`flex items-center gap-3 px-4 py-3 w-full text-red-600 hover:bg-red-50 rounded-xl transition-colors mt-1 ${isCollapsed ? 'justify-center px-2' : ''}`}
                         title={isCollapsed ? 'Logout' : ''}
                     >

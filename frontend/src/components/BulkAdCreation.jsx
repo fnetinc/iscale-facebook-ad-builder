@@ -1,11 +1,15 @@
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import React, { useState } from 'react';
 import { ChevronRight, Plus, Trash2, Loader } from 'lucide-react';
 import { useCampaign } from '../context/CampaignContext';
 import { createCompleteAd, createFacebookCampaign, createFacebookAdSet } from '../lib/facebookApi';
 
+const API_URL = 'http://localhost:8000/api/v1';
+
 const BulkAdCreation = ({ onNext, onBack }) => {
     const { showWarning, showError } = useToast();
+    const { authFetch } = useAuth();
     const { campaignData, adsetData, creativeData, adsData, setAdsData, selectedAdAccount } = useCampaign();
     const [loading, setLoading] = useState(false);
     const [progress, setProgress] = useState({ current: 0, total: 0, status: '' });
@@ -82,7 +86,7 @@ const BulkAdCreation = ({ onNext, onBack }) => {
 
             // Save Campaign Locally (Ensure it exists in DB for FK constraints)
             try {
-                const saveCampRes = await fetch('/api/v1/facebook/campaigns/save', {
+                const saveCampRes = await authFetch(`${API_URL}/facebook/campaigns/save`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -110,7 +114,7 @@ const BulkAdCreation = ({ onNext, onBack }) => {
 
             // Save Ad Set Locally (Ensure it exists in DB for FK constraints)
             try {
-                const saveAdSetRes = await fetch('/api/v1/facebook/adsets/save', {
+                const saveAdSetRes = await authFetch(`${API_URL}/facebook/adsets/save`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -173,7 +177,7 @@ const BulkAdCreation = ({ onNext, onBack }) => {
                     );
 
                     // Save to local database
-                    await fetch('/api/v1/facebook/ads/save', {
+                    await authFetch(`${API_URL}/facebook/ads/save`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({

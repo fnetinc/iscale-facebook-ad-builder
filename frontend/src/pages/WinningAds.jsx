@@ -1,7 +1,10 @@
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import React, { useState, useRef } from 'react';
 import { Plus, X, Copy, Check, Upload, Loader, Star } from 'lucide-react';
 import ImageTemplateSelector from '../components/ImageTemplateSelector';
+
+const API_URL = 'http://localhost:8000/api/v1';
 
 // Helper Components
 const CopyButton = ({ text, label }) => {
@@ -45,6 +48,7 @@ const AnalysisField = ({ label, value, fullWidth = false }) => {
 
 const WinningAds = () => {
     const { showError } = useToast();
+    const { authFetch } = useAuth();
     const [selectedTemplate, setSelectedTemplate] = useState(null);
     const [uploading, setUploading] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
@@ -62,7 +66,7 @@ const WinningAds = () => {
                 formData.append('images', file);
             });
 
-            const response = await fetch('/api/v1/templates/upload', {
+            const response = await authFetch(`${API_URL}/templates/upload`, {
                 method: 'POST',
                 body: formData
             });

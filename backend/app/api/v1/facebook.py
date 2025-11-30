@@ -1,8 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException
 from typing import Dict, Any, Optional
 from app.services.facebook_service import FacebookService
-from app.models import FacebookAd, FacebookAdSet, FacebookCampaign
+from app.models import FacebookAd, FacebookAdSet, FacebookCampaign, User
 from app.database import get_db
+from app.core.deps import get_current_active_user, require_permission
 from sqlalchemy.orm import Session
 
 router = APIRouter()
@@ -17,14 +18,21 @@ def get_facebook_service():
     return service
 
 @router.get("/accounts")
-def get_ad_accounts(service: FacebookService = Depends(get_facebook_service)):
+def get_ad_accounts(
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(get_current_active_user)
+):
     try:
         return service.get_ad_accounts()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/campaigns")
-def read_campaigns(ad_account_id: Optional[str] = None, service: FacebookService = Depends(get_facebook_service)):
+def read_campaigns(
+    ad_account_id: Optional[str] = None,
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(get_current_active_user)
+):
     try:
         campaigns = service.get_campaigns(ad_account_id)
         # Convert FB objects to dicts
@@ -33,7 +41,12 @@ def read_campaigns(ad_account_id: Optional[str] = None, service: FacebookService
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/campaigns")
-def create_campaign(campaign: Dict[str, Any], ad_account_id: Optional[str] = None, service: FacebookService = Depends(get_facebook_service)):
+def create_campaign(
+    campaign: Dict[str, Any],
+    ad_account_id: Optional[str] = None,
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(require_permission("campaigns:write"))
+):
     try:
         # Check if ad_account_id is in query or body (body takes precedence if we structured it that way, but here we use query or separate param)
         # For POST, usually better to have it in the body or query. Let's support query for consistency with GET
@@ -43,7 +56,11 @@ def create_campaign(campaign: Dict[str, Any], ad_account_id: Optional[str] = Non
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/pixels")
-def read_pixels(ad_account_id: Optional[str] = None, service: FacebookService = Depends(get_facebook_service)):
+def read_pixels(
+    ad_account_id: Optional[str] = None,
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(get_current_active_user)
+):
     try:
         pixels = service.get_pixels(ad_account_id)
         # Convert FB objects to dicts
@@ -52,7 +69,10 @@ def read_pixels(ad_account_id: Optional[str] = None, service: FacebookService = 
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/pages")
-def read_pages(service: FacebookService = Depends(get_facebook_service)):
+def read_pages(
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(get_current_active_user)
+):
     try:
         pages = service.get_pages()
         return pages
@@ -61,7 +81,12 @@ def read_pages(service: FacebookService = Depends(get_facebook_service)):
 
 
 @router.get("/adsets")
-def read_adsets(ad_account_id: Optional[str] = None, campaign_id: Optional[str] = None, service: FacebookService = Depends(get_facebook_service)):
+def read_adsets(
+    ad_account_id: Optional[str] = None,
+    campaign_id: Optional[str] = None,
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(get_current_active_user)
+):
     try:
         adsets = service.get_adsets(ad_account_id, campaign_id)
         return [dict(a) for a in adsets]
@@ -69,7 +94,12 @@ def read_adsets(ad_account_id: Optional[str] = None, campaign_id: Optional[str] 
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/adsets")
-def create_adset(adset: Dict[str, Any], ad_account_id: Optional[str] = None, service: FacebookService = Depends(get_facebook_service)):
+def create_adset(
+    adset: Dict[str, Any],
+    ad_account_id: Optional[str] = None,
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(require_permission("campaigns:write"))
+):
     try:
         result = service.create_adset(adset, ad_account_id)
         return dict(result)
@@ -77,7 +107,12 @@ def create_adset(adset: Dict[str, Any], ad_account_id: Optional[str] = None, ser
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/creatives")
-def create_creative(creative: Dict[str, Any], ad_account_id: Optional[str] = None, service: FacebookService = Depends(get_facebook_service)):
+def create_creative(
+    creative: Dict[str, Any],
+    ad_account_id: Optional[str] = None,
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(require_permission("campaigns:write"))
+):
     try:
         result = service.create_creative(creative, ad_account_id)
         return dict(result)
@@ -85,7 +120,12 @@ def create_creative(creative: Dict[str, Any], ad_account_id: Optional[str] = Non
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/ads")
-def create_ad(ad: Dict[str, Any], ad_account_id: Optional[str] = None, service: FacebookService = Depends(get_facebook_service)):
+def create_ad(
+    ad: Dict[str, Any],
+    ad_account_id: Optional[str] = None,
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(require_permission("campaigns:write"))
+):
     try:
         result = service.create_ad(ad, ad_account_id)
         return dict(result)
@@ -93,7 +133,11 @@ def create_ad(ad: Dict[str, Any], ad_account_id: Optional[str] = None, service: 
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/ads")
-def read_ads(adset_id: str, service: FacebookService = Depends(get_facebook_service)):
+def read_ads(
+    adset_id: str,
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(get_current_active_user)
+):
     try:
         ads = service.get_ads(adset_id)
         return [dict(a) for a in ads]
@@ -101,7 +145,11 @@ def read_ads(adset_id: str, service: FacebookService = Depends(get_facebook_serv
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/campaigns/save")
-def save_campaign_locally(campaign_data: Dict[str, Any], db: Session = Depends(get_db)):
+def save_campaign_locally(
+    campaign_data: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("campaigns:write"))
+):
     try:
         # Check if exists
         existing = db.query(FacebookCampaign).filter(FacebookCampaign.id == campaign_data.get('id')).first()
@@ -133,7 +181,11 @@ def save_campaign_locally(campaign_data: Dict[str, Any], db: Session = Depends(g
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/adsets/save")
-def save_adset_locally(adset_data: Dict[str, Any], db: Session = Depends(get_db)):
+def save_adset_locally(
+    adset_data: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("campaigns:write"))
+):
     try:
         # Check if exists
         existing = db.query(FacebookAdSet).filter(FacebookAdSet.id == adset_data.get('id')).first()
@@ -180,7 +232,11 @@ def save_adset_locally(adset_data: Dict[str, Any], db: Session = Depends(get_db)
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/ads/save")
-def save_ad_locally(ad_data: Dict[str, Any], db: Session = Depends(get_db)):
+def save_ad_locally(
+    ad_data: Dict[str, Any],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("campaigns:write"))
+):
     try:
         # Check if adset exists locally, if not we might need to create it or handle error
         # For now, assuming adset exists or we just save the ID
@@ -210,7 +266,12 @@ def save_ad_locally(ad_data: Dict[str, Any], db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/upload-image")
-def upload_image(data: Dict[str, str], ad_account_id: Optional[str] = None, service: FacebookService = Depends(get_facebook_service)):
+def upload_image(
+    data: Dict[str, str],
+    ad_account_id: Optional[str] = None,
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(require_permission("campaigns:write"))
+):
     try:
         image_url = data.get("image_url")
         if not image_url:
@@ -222,11 +283,12 @@ def upload_image(data: Dict[str, str], ad_account_id: Optional[str] = None, serv
 
 @router.get("/locations/search")
 def search_locations(
-    q: str, 
-    type: str = "city", 
-    limit: int = 10, 
-    ad_account_id: Optional[str] = None, 
-    service: FacebookService = Depends(get_facebook_service)
+    q: str,
+    type: str = "city",
+    limit: int = 10,
+    ad_account_id: Optional[str] = None,
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(get_current_active_user)
 ):
     try:
         locations = service.search_locations(q, type, limit, ad_account_id)

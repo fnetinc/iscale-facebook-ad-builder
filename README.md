@@ -108,3 +108,29 @@ As of the latest version, SQLite is deprecated. PostgreSQL is required for all e
 
 - [Specifications](./specifications.md) - Technical architecture and API documentation
 - [Supabase Setup](./SUPABASE_SETUP.md) - Supabase-specific configuration
+- [Railway Deployment](./RAILWAY_DEPLOYMENT.md) - Deploy to Railway (recommended for production)
+
+## Deployment
+
+### Railway (Recommended)
+
+Railway provides the easiest deployment experience with managed PostgreSQL, automatic deployments, and built-in monitoring.
+
+**Quick Start:**
+1. Push your code to GitHub
+2. Create a Railway project and connect your repository
+3. Add PostgreSQL database
+4. Configure environment variables
+5. Deploy!
+
+See the [Railway Deployment Guide](./RAILWAY_DEPLOYMENT.md) for detailed step-by-step instructions.
+
+### Other Platforms
+
+This application can also be deployed to:
+- **Render**: Similar to Railway, supports Docker
+- **Fly.io**: Global edge deployment
+- **DigitalOcean App Platform**: Managed platform with PostgreSQL
+- **AWS/GCP/Azure**: Traditional cloud providers (requires more setup)
+
+For these platforms, you can use the provided `Dockerfile` and adapt the configuration as needed.

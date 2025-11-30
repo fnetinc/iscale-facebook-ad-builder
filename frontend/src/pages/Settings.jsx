@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Plus, Sparkles, Edit, Trash2, Save, X, FileText, Code } from 'lucide-react';
+import { Settings as SettingsIcon, Plus, Sparkles, Edit, Trash2, Save, X, FileText, Code, AlertTriangle } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 import { adStyles as initialStyles, AD_CATEGORIES } from '../data/adStyles';
 import { PROMPT_CATEGORIES } from '../data/prompts';
@@ -17,6 +17,7 @@ export default function Settings() {
     const [showAIModal, setShowAIModal] = useState(false);
     const [generating, setGenerating] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [styleToDelete, setStyleToDelete] = useState(null);
 
     // Load prompts and styles from API
     useEffect(() => {
@@ -60,9 +61,14 @@ export default function Settings() {
     ];
 
     const handleDeleteStyle = (styleId) => {
-        if (confirm('Are you sure you want to delete this style?')) {
-            setStyles(styles.filter(s => s.id !== styleId));
+        setStyleToDelete(styleId);
+    };
+
+    const confirmDeleteStyle = () => {
+        if (styleToDelete) {
+            setStyles(styles.filter(s => s.id !== styleToDelete));
             showSuccess('Style deleted successfully');
+            setStyleToDelete(null);
         }
     };
 
@@ -183,6 +189,35 @@ export default function Settings() {
                     onGenerate={handleGenerateAIStyles}
                     generating={generating}
                 />
+            )}
+
+            {/* Delete Style Confirmation Modal */}
+            {styleToDelete && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                        <div className="flex items-center gap-3 text-red-600 mb-4">
+                            <AlertTriangle size={24} />
+                            <h3 className="text-lg font-bold">Delete Style?</h3>
+                        </div>
+                        <p className="text-gray-600 mb-6">
+                            Are you sure you want to delete this ad style? This action cannot be undone.
+                        </p>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setStyleToDelete(null)}
+                                className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={confirmDeleteStyle}
+                                className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700"
+                            >
+                                Delete
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

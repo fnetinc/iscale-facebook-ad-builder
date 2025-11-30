@@ -2,18 +2,28 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
-from app.models import Brand as BrandModel, Product as ProductModel, CustomerProfile as ProfileModel
+from app.models import Brand as BrandModel, Product as ProductModel, CustomerProfile as ProfileModel, User
 from app.schemas.brand import Brand, BrandCreate, BrandUpdate
+from app.core.deps import get_current_active_user, require_permission
 
 router = APIRouter()
 
 @router.get("", response_model=List[Brand])
-def read_brands(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_brands(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     brands = db.query(BrandModel).offset(skip).limit(limit).all()
     return brands
 
 @router.post("/", response_model=Brand)
-def create_brand(brand: BrandCreate, db: Session = Depends(get_db)):
+def create_brand(
+    brand: BrandCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("brands:write"))
+):
     db_brand = BrandModel(
         id=brand.id,
         name=brand.name,
@@ -49,7 +59,11 @@ def create_brand(brand: BrandCreate, db: Session = Depends(get_db)):
     return db_brand
 
 @router.delete("/{brand_id}")
-def delete_brand(brand_id: str, db: Session = Depends(get_db)):
+def delete_brand(
+    brand_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("brands:delete"))
+):
     db_brand = db.query(BrandModel).filter(BrandModel.id == brand_id).first()
     if db_brand is None:
         raise HTTPException(status_code=404, detail="Brand not found")
@@ -58,7 +72,12 @@ def delete_brand(brand_id: str, db: Session = Depends(get_db)):
     return {"success": True}
 
 @router.put("/{brand_id}", response_model=Brand)
-def update_brand(brand_id: str, brand: BrandUpdate, db: Session = Depends(get_db)):
+def update_brand(
+    brand_id: str,
+    brand: BrandUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("brands:write"))
+):
     db_brand = db.query(BrandModel).filter(BrandModel.id == brand_id).first()
     if not db_brand:
         raise HTTPException(status_code=404, detail="Brand not found")

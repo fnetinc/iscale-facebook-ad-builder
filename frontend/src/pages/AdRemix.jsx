@@ -2,14 +2,18 @@ import React, { useState } from 'react';
 import { ChevronRight, ChevronLeft, Sparkles, Check, Image, FileText, Briefcase, Package, Users } from 'lucide-react';
 import { useBrands } from '../context/BrandContext';
 import { useToast } from '../context/ToastContext';
+import { useAuth } from '../context/AuthContext';
 import ImageTemplateSelector from '../components/ImageTemplateSelector';
 import BrandSelectionStep from '../components/steps/BrandSelectionStep';
 import ProductSelectionStep from '../components/steps/ProductSelectionStep';
 import ProfileSelectionStep from '../components/steps/ProfileSelectionStep';
 
+const API_URL = 'http://localhost:8000/api/v1';
+
 export default function AdRemix() {
     const { brands, customerProfiles } = useBrands();
     const { showError } = useToast();
+    const { authFetch } = useAuth();
     const [currentStep, setCurrentStep] = useState(1);
     const [loading, setLoading] = useState(false);
     const [blueprint, setBlueprint] = useState(null);
@@ -50,7 +54,7 @@ export default function AdRemix() {
     const handleDeconstruct = async () => {
         setLoading(true);
         try {
-            const response = await fetch('/api/v1/ad-remix/deconstruct', {
+            const response = await authFetch(`${API_URL}/ad-remix/deconstruct`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ template_id: wizardData.template.id })
@@ -71,7 +75,7 @@ export default function AdRemix() {
     const handleReconstruct = async () => {
         setLoading(true);
         try {
-            const response = await fetch('/api/v1/ad-remix/reconstruct', {
+            const response = await authFetch(`${API_URL}/ad-remix/reconstruct`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

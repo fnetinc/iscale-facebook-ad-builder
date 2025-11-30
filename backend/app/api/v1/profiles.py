@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from app.database import get_db
-from app.models import CustomerProfile as ProfileModel
+from app.models import CustomerProfile as ProfileModel, User
+from app.core.deps import get_current_active_user, require_permission
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -26,7 +27,12 @@ class CustomerProfile(CustomerProfileBase):
         from_attributes = True
 
 @router.get("", response_model=List[CustomerProfile])
-def read_profiles(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+def read_profiles(
+    skip: int = 0,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
     profiles = db.query(ProfileModel).offset(skip).limit(limit).all()
     # Convert snake_case to camelCase for frontend
     return [{
@@ -39,7 +45,11 @@ def read_profiles(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
     } for p in profiles]
 
 @router.post("/", response_model=CustomerProfile)
-def create_profile(profile: CustomerProfileCreate, db: Session = Depends(get_db)):
+def create_profile(
+    profile: CustomerProfileCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("brands:write"))
+):
     db_profile = ProfileModel(
         id=profile.id,
         name=profile.name,
@@ -60,22 +70,31 @@ def create_profile(profile: CustomerProfileCreate, db: Session = Depends(get_db)
     }
 
 @router.put("/{profile_id}")
-def update_profile(profile_id: str, profile: CustomerProfileBase, db: Session = Depends(get_db)):
+def update_profile(
+    profile_id: str,
+    profile: CustomerProfileBase,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("brands:write"))
+):
     db_profile = db.query(ProfileModel).filter(ProfileModel.id == profile_id).first()
     if not db_profile:
         raise HTTPException(status_code=404, detail="Profile not found")
-    
+
     db_profile.name = profile.name
     db_profile.demographics = profile.demographics
     db_profile.pain_points = profile.painPoints
     db_profile.goals = profile.goals
-    
+
     db.commit()
     db.refresh(db_profile)
     return {"success": True}
 
 @router.delete("/{profile_id}")
-def delete_profile(profile_id: str, db: Session = Depends(get_db)):
+def delete_profile(
+    profile_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("brands:delete"))
+):
     db_profile = db.query(ProfileModel).filter(ProfileModel.id == profile_id).first()
     if not db_profile:
         raise HTTPException(status_code=404, detail="Profile not found")
