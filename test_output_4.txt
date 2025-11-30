@@ -1,9 +1,0 @@
-[dotenv@17.2.3] injecting env (7) from .env -- tip: 👥 sync secrets across teammates & machines: https://dotenvx.com/ops
-✅ Found FAL_AI_API_KEY: 5c901...
-🚀 Starting Fal.ai test...
-✅ Request submitted. ID: f0a4e784-4f40-44fe-8fe1-5a4123293f8e
-Raw Status Response: 405: Method Not Allowed
-❌ Test failed: SyntaxError: Unexpected non-whitespace character after JSON at position 3 (line 1 column 4)
-    at JSON.parse (<anonymous>)
-    at testFal (file:///Users/jasonakatiff/video_ad_builder/test_fal.js:53:37)
-    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)

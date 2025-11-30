@@ -9,7 +9,15 @@ Facebook Ad Automation App - A full-stack application for automating the lifecyc
 **Tech Stack:**
 - Frontend: React 19 + Vite + TailwindCSS
 - Backend: Python FastAPI (Python 3.11+)
-- Database: PostgreSQL (REQUIRED - SQLite is deprecated)
+- Database: PostgreSQL on Railway
+- Storage: Cloudflare R2 (S3-compatible)
+- Hosting: Railway (backend + frontend + database)
+- Domain: breadwinner.a4d.com
+
+**Production URLs:**
+- Frontend: https://breadwinner.a4d.com
+- Backend API: https://ad-builder-backend-production.up.railway.app
+- API Docs: https://ad-builder-backend-production.up.railway.app/api/v1/docs
 
 ## Development Commands
 
@@ -119,7 +127,7 @@ backend/app/
 - PostgreSQL required - config.py validates DATABASE_URL on startup
 - Facebook API uses `facebook-business` SDK (AdAccount, Campaign, AdSet, Ad, AdCreative, AdImage)
 - AI services use Google Gemini (GEMINI_API_KEY) and Fal.ai (FAL_AI_API_KEY)
-- File uploads stored in `uploads/` directory, mounted as static files at `/uploads`
+- File uploads go to Cloudflare R2 when configured, falls back to local `uploads/` for dev
 
 ### Frontend Structure (React + Vite)
 
@@ -210,27 +218,26 @@ Modal design requirements:
 
 **PostgreSQL is REQUIRED.** SQLite is deprecated and will cause startup errors.
 
-### Setup PostgreSQL
+Production uses Railway PostgreSQL. Local dev connects to the same Railway database for shared data.
 
-```bash
-# macOS
-brew install postgresql@15
-brew services start postgresql@15
-createdb video_ad_builder
+### Local Development
 
-# Set environment variable
-export DATABASE_URL="postgresql://localhost:5432/video_ad_builder"
-```
-
-For Supabase, use connection string from Project Settings → Database.
+Uses Railway PostgreSQL (configured in `.env`). No local database setup needed.
 
 ### Environment Variables
 
 Create `.env` in project root:
 
 ```bash
-# Database (REQUIRED)
-DATABASE_URL=postgresql://user:password@host:5432/video_ad_builder
+# Database (Railway PostgreSQL)
+DATABASE_URL=postgresql://postgres:xxx@host.proxy.rlwy.net:port/railway
+
+# Cloudflare R2 Storage
+R2_ACCOUNT_ID=...
+R2_ACCESS_KEY_ID=...
+R2_SECRET_ACCESS_KEY=...
+R2_BUCKET_NAME=breadwinner
+R2_PUBLIC_URL=https://pub-xxx.r2.dev
 
 # AI Services
 GEMINI_API_KEY=...
@@ -238,16 +245,18 @@ FAL_AI_API_KEY=...
 KIE_AI_API_KEY=...
 
 # Facebook Marketing API
-FACEBOOK_ACCESS_TOKEN=...  # or VITE_FACEBOOK_ACCESS_TOKEN
-FACEBOOK_AD_ACCOUNT_ID=... # or VITE_FACEBOOK_AD_ACCOUNT_ID
-FACEBOOK_APP_ID=...
-FACEBOOK_APP_SECRET=...
+VITE_FACEBOOK_ACCESS_TOKEN=...
+VITE_FACEBOOK_API_VERSION=v24.0
 
-# Frontend
-VITE_API_URL=http://localhost:8000
+# Auth
+SECRET_KEY=...  # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
 ```
 
-**Note:** Backend checks for both standard and `VITE_` prefixed env vars for Facebook credentials.
+**Railway Environment Variables** (set in dashboard):
+- `DATABASE_URL` → Use `${{Postgres.DATABASE_URL}}` to auto-sync with Postgres service
+- `SECRET_KEY` → Strong random key for JWT auth
+- All R2_* variables for storage
+- All AI API keys
 
 ## Search & Refactoring Tools
 
@@ -276,10 +285,11 @@ VITE_API_URL=http://localhost:8000
 
 ## Security Notes
 
-- CORS configured with `allow_origins=["*"]` in development (main.py:16) - should be restricted in production
-- Authentication/authorization not currently implemented
-- File uploads limited to images (jpg, png, webp), 10MB max
-- Facebook API tokens stored in environment variables
+- CORS restricted to specific origins (localhost, Railway, breadwinner.a4d.com)
+- JWT-based authentication implemented (access + refresh tokens)
+- File uploads limited to images (jpg, jpeg, png, gif, webp), 10MB max
+- All secrets stored in environment variables (never committed)
+- CSP configured in frontend to restrict resource loading
 
 ## Key Features
 
@@ -293,10 +303,23 @@ VITE_API_URL=http://localhost:8000
 8. **Generated Ads Gallery**: View ads grouped by bundle_id
 9. **Reporting**: Analytics dashboard (in development)
 
+## Deployment
+
+**Railway Setup:**
+1. Backend auto-deploys from `main` branch via Dockerfile
+2. Frontend auto-deploys from `main` branch via Nixpacks
+3. Database is Railway PostgreSQL service
+4. Custom domain: breadwinner.a4d.com → CNAME to Railway
+
+**Cloudflare R2 Setup:**
+- Bucket: `breadwinner`
+- Public access enabled via R2.dev URL
+- CORS configured to allow frontend origins
+
 ## Common Gotchas
 
 - Database migrations not automated - use Alembic if schema changes needed
-- File uploads stored locally in `backend/uploads/` - not production-ready
-- Frontend makes direct API calls - no API client abstraction layer
-- Facebook Service checks both standard and VITE_ prefixed env vars (backwards compatibility)
-- Ad account IDs auto-prefixed with 'act_' if missing (facebook_service.py:43-45)
+- Frontend API URL set via `VITE_API_URL` env var (build-time, not runtime)
+- When adding new origins: update CORS in `main.py` AND CSP in `index.html`
+- Ad account IDs auto-prefixed with 'act_' if missing (facebook_service.py)
+- Local dev uses same Railway DB + R2 as production (shared data)
