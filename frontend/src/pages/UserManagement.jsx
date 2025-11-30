@@ -4,7 +4,7 @@ import { useToast } from '../context/ToastContext';
 import { Users, Shield, Trash2, Plus, X, Check, UserCheck, UserX, Pencil } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
 
-const API_URL = 'http://localhost:8000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 const UserManagement = () => {
     const [users, setUsers] = useState([]);

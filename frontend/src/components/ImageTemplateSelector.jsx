@@ -3,7 +3,7 @@ import { X, Filter, Grid, List, Sparkles, Trash2, AlertTriangle } from 'lucide-r
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = 'http://localhost:8000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 export default function ImageTemplateSelector({ onSelect, onClose, embedded = false }) {
     const { showError } = useToast();

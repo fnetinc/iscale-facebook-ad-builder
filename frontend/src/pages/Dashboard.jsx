@@ -3,7 +3,7 @@ import { LayoutDashboard, Image, Video, Star, TrendingUp, Zap, Wand2, Package, S
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
-const API_URL = 'http://localhost:8000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 export default function Dashboard() {
     const { authFetch } = useAuth();

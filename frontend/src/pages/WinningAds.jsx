@@ -4,7 +4,7 @@ import React, { useState, useRef } from 'react';
 import { Plus, X, Copy, Check, Upload, Loader, Star } from 'lucide-react';
 import ImageTemplateSelector from '../components/ImageTemplateSelector';
 
-const API_URL = 'http://localhost:8000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 // Helper Components
 const CopyButton = ({ text, label }) => {

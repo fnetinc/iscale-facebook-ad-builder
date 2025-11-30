@@ -9,7 +9,7 @@ import ProductSelectionStep from '../components/steps/ProductSelectionStep';
 import ProfileSelectionStep from '../components/steps/ProfileSelectionStep';
 import StyleSelector from '../components/StyleSelector';
 
-const API_URL = 'http://localhost:8000/api/v1';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 export default function ImageAds() {
     const { brands, customerProfiles } = useBrands();

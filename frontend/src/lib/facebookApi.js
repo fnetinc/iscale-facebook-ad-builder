@@ -1,7 +1,7 @@
 // Facebook Marketing API Integration Service
 // Now proxies through our backend with authentication
 
-const API_BASE_URL = 'http://localhost:8000/api/v1/facebook';
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1') + '/facebook';
 
 // Helper to get auth headers from localStorage
 const getAuthHeaders = () => {
@@ -198,7 +198,7 @@ export async function uploadImageToFacebook(imageUrl, adAccountId) {
             formData.append('file', blob, filename);
 
             // 3. Upload to our backend
-            const uploadResponse = await authFetch('http://localhost:8000/api/v1/uploads/', {
+            const uploadResponse = await authFetch((import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1') + '/uploads/', {
                 method: 'POST',
                 body: formData
             });
