@@ -249,6 +249,14 @@ VITE_API_URL=http://localhost:8000
 
 **Note:** Backend checks for both standard and `VITE_` prefixed env vars for Facebook credentials.
 
+## Search & Refactoring Tools
+
+- Use `ast-grep` for structural code search/replace (AST-aware, not text):
+  - `ast-grep -p 'const API_URL = $VAL' --lang js` - find API_URL declarations
+  - `ast-grep -p 'useState($INIT)' --lang tsx` - find useState patterns
+  - `ast-grep -p '$OLD($$$)' -r '$NEW($$$)' --lang js` - rename functions
+  - Useful for bulk refactors across React/JS codebase
+
 ## Code Style & Standards
 
 ### Backend (Python)

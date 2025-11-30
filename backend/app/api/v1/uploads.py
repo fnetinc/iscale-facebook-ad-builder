@@ -1,9 +1,9 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException
-import shutil
 import os
 import uuid
 from typing import Dict
 from pathlib import Path
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -11,10 +11,53 @@ router = APIRouter()
 ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
-# Security: Use absolute path and ensure directory exists with proper permissions
+# Local upload dir for fallback
 UPLOAD_DIR = Path(__file__).parent.parent.parent.parent / "uploads"
-UPLOAD_DIR = UPLOAD_DIR.resolve()  # Convert to absolute path
+UPLOAD_DIR = UPLOAD_DIR.resolve()
 os.makedirs(UPLOAD_DIR, mode=0o755, exist_ok=True)
+
+# Initialize R2 client if configured
+_s3_client = None
+
+def get_s3_client():
+    global _s3_client
+    if _s3_client is None and settings.r2_enabled:
+        import boto3
+        _s3_client = boto3.client(
+            's3',
+            endpoint_url=settings.r2_endpoint_url,
+            aws_access_key_id=settings.R2_ACCESS_KEY_ID,
+            aws_secret_access_key=settings.R2_SECRET_ACCESS_KEY,
+            region_name='auto'
+        )
+    return _s3_client
+
+
+async def upload_to_r2(file_content: bytes, filename: str, content_type: str) -> str:
+    """Upload file to Cloudflare R2 and return public URL"""
+    client = get_s3_client()
+    if not client:
+        raise HTTPException(status_code=500, detail="R2 storage not configured")
+
+    try:
+        client.put_object(
+            Bucket=settings.R2_BUCKET_NAME,
+            Key=filename,
+            Body=file_content,
+            ContentType=content_type
+        )
+        return f"{settings.R2_PUBLIC_URL}/{filename}"
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to upload to R2: {str(e)}")
+
+
+async def upload_to_local(file_content: bytes, filename: str) -> str:
+    """Upload file to local filesystem and return relative URL"""
+    file_path = UPLOAD_DIR / filename
+    with open(file_path, "wb") as buffer:
+        buffer.write(file_content)
+    return f"/uploads/{filename}"
+
 
 @router.post("/", response_model=Dict[str, str])
 async def upload_file(file: UploadFile = File(...)):
@@ -22,35 +65,34 @@ async def upload_file(file: UploadFile = File(...)):
         # Security: Sanitize filename to prevent path traversal
         safe_filename = os.path.basename(file.filename)
         file_extension = os.path.splitext(safe_filename)[1].lower()
-        
+
         # Security: Validate file extension
         if file_extension not in ALLOWED_EXTENSIONS:
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
             )
-        
+
+        # Read file content
+        file_content = await file.read()
+
         # Security: Validate file size
-        file.file.seek(0, 2)  # Seek to end
-        file_size = file.file.tell()
-        file.file.seek(0)  # Reset to beginning
-        
-        if file_size > MAX_FILE_SIZE:
+        if len(file_content) > MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=400,
                 detail=f"File too large. Maximum size: {MAX_FILE_SIZE / (1024 * 1024)}MB"
             )
-        
+
         # Generate a unique filename
         filename = f"{uuid.uuid4()}{file_extension}"
-        file_path = UPLOAD_DIR / filename
 
-        # Save the file
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        # Upload to R2 if configured, otherwise local
+        if settings.r2_enabled:
+            url = await upload_to_r2(file_content, filename, file.content_type or 'application/octet-stream')
+        else:
+            url = await upload_to_local(file_content, filename)
 
-        # Return the relative URL
-        return {"url": f"/uploads/{filename}"}
+        return {"url": url}
     except HTTPException:
         raise
     except Exception as e:
