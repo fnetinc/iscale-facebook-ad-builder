@@ -5,6 +5,7 @@ import { adStyles as initialStyles, AD_CATEGORIES } from '../data/adStyles';
 import { PROMPT_CATEGORIES } from '../data/prompts';
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+console.log('API_BASE:', API_BASE, 'VITE_API_URL:', import.meta.env.VITE_API_URL);
 
 export default function Settings() {
     const { showSuccess, showError } = useToast();
