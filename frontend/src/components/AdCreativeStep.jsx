@@ -37,6 +37,48 @@ const AdCreativeStep = ({ onNext, onBack }) => {
     const [loadingPages, setLoadingPages] = useState(false);
 
     const [manualPageEntry, setManualPageEntry] = useState(false);
+    const [isDragging, setIsDragging] = useState(false);
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length === 0) return;
+
+        // Filter for images only
+        const imageFiles = files.filter(file => file.type.startsWith('image/'));
+
+        if (imageFiles.length === 0) {
+            showWarning('Please drop image files only');
+            return;
+        }
+
+        const newCreatives = imageFiles.map(file => ({
+            id: `creative_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+            file,
+            previewUrl: URL.createObjectURL(file),
+            name: file.name
+        }));
+
+        setCreativeData(prev => ({
+            ...prev,
+            creatives: [...(prev.creatives || []), ...newCreatives]
+        }));
+    };
 
     // Prepopulate Creative Name with Ad Set Name if empty
     useEffect(() => {
@@ -391,7 +433,13 @@ const AdCreativeStep = ({ onNext, onBack }) => {
                     </label>
 
                     {/* Upload Area */}
-                    <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center hover:border-amber-500 transition-colors mb-4">
+                    <div
+                        className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors mb-4 ${isDragging ? 'border-amber-500 bg-amber-50' : 'border-gray-300 hover:border-amber-500'
+                            }`}
+                        onDragOver={handleDragOver}
+                        onDragLeave={handleDragLeave}
+                        onDrop={handleDrop}
+                    >
                         <input
                             type="file"
                             accept="image/*"
@@ -401,8 +449,10 @@ const AdCreativeStep = ({ onNext, onBack }) => {
                             id="ad-image-upload"
                         />
                         <label htmlFor="ad-image-upload" className="cursor-pointer flex flex-col items-center">
-                            <Upload className="text-gray-400 mb-2" size={32} />
-                            <span className="text-gray-600 font-medium">Click to upload images</span>
+                            <Upload className={`mb-2 ${isDragging ? 'text-amber-500' : 'text-gray-400'}`} size={32} />
+                            <span className={`font-medium ${isDragging ? 'text-amber-700' : 'text-gray-600'}`}>
+                                {isDragging ? 'Drop images here' : 'Click to upload images'}
+                            </span>
                             <span className="text-sm text-gray-400 mt-1">or drag and drop</span>
                             <span className="text-xs text-amber-500 mt-2 bg-amber-50 px-2 py-1 rounded">Supports multiple files</span>
                         </label>
@@ -460,6 +510,7 @@ const AdCreativeStep = ({ onNext, onBack }) => {
                         />
                     </div>
                 </div>
+
                 {/* Body Text */}
                 <div>
                     <div className="flex items-center justify-between mb-2">

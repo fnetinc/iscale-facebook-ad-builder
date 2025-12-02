@@ -93,6 +93,7 @@ class FacebookService:
             Campaign.Field.lifetime_budget,
             Campaign.Field.budget_remaining,
             Campaign.Field.bid_strategy,
+            'is_adset_budget_sharing_enabled',
         ]
 
         
@@ -110,19 +111,24 @@ class FacebookService:
         }
 
         # Handle budget based on budget type
-        if campaign_data.get('budget_type') == 'CBO' and campaign_data.get('daily_budget'):
+        budget_type = campaign_data.get('budget_type') or campaign_data.get('budgetType')
+        daily_budget = campaign_data.get('daily_budget') or campaign_data.get('dailyBudget')
+        
+        if budget_type == 'CBO' and daily_budget:
             # Campaign Budget Optimization
-            params[Campaign.Field.daily_budget] = int(float(campaign_data['daily_budget']) * 100)
+            # Set budget at campaign level, do NOT set is_adset_budget_sharing_enabled
+            params[Campaign.Field.daily_budget] = int(float(daily_budget) * 100)
         else:
             # Ad Set Budget Optimization (ABO)
-            # Facebook requires this field when NOT using CBO
-            # True = allow ad sets to share 20% of budget for optimization
-            # False = strict budget limits per ad set
+            # Budget is set at ad set level, not campaign level
+            # Starting with API v24.0+, is_adset_budget_sharing_enabled is REQUIRED for ABO
+            # Set to False to enforce strict ad set budgets
             params['is_adset_budget_sharing_enabled'] = False
 
             
-        if campaign_data.get('bid_strategy'):
-            params[Campaign.Field.bid_strategy] = campaign_data['bid_strategy']
+        bid_strategy = campaign_data.get('bid_strategy') or campaign_data.get('bidStrategy')
+        if bid_strategy:
+            params[Campaign.Field.bid_strategy] = bid_strategy
 
         return account.create_campaign(params=params)
 
@@ -261,31 +267,38 @@ class FacebookService:
                 }
 
 
-        # Handle budget
-        if adset_data.get('daily_budget') or adset_data.get('dailyBudget'):
-             budget = adset_data.get('daily_budget') or adset_data.get('dailyBudget')
-             params[AdSet.Field.daily_budget] = int(float(budget) * 100)
+        # Handle budget - only set for ABO campaigns (not CBO)
+        # CBO = Campaign Budget Optimization (budget at campaign level)
+        # ABO = Ad Set Budget Optimization (budget at ad set level)
+        budget_type = adset_data.get('budget_type') or adset_data.get('budgetType')
+
+        if budget_type != 'CBO':
+            # For ABO campaigns, budget is required at ad set level
+            budget = adset_data.get('daily_budget') or adset_data.get('dailyBudget')
+            if budget:
+                params[AdSet.Field.daily_budget] = int(float(budget) * 100)
+        # For CBO campaigns, don't set daily_budget - it's managed at campaign level
 
         # Handle start time
         if adset_data.get('start_time') or adset_data.get('startTime'):
             start_time = adset_data.get('start_time') or adset_data.get('startTime')
             params[AdSet.Field.start_time] = start_time
 
-        # Handle bid strategy and bid amount together
-        # Facebook requires bid_amount if using certain bid strategies
+        # Handle bid strategy and bid amount
+        # For CBO campaigns, bid_strategy is set at campaign level - don't set at ad set level
+        # For ABO campaigns, we can set bid_strategy at ad set level
         bid_amount = adset_data.get('bid_amount') or adset_data.get('bidAmount')
         bid_strategy = adset_data.get('bid_strategy') or adset_data.get('bidStrategy')
-        
+
         if bid_amount:
             params[AdSet.Field.bid_amount] = int(float(bid_amount) * 100)
-            # Only set bid_strategy if we have a bid_amount
             if bid_strategy:
                 params[AdSet.Field.bid_strategy] = bid_strategy
-        else:
-            # If no bid amount is provided, explicitly set to LOWEST_COST_WITHOUT_CAP
-            # This prevents errors if the campaign has a different default
+        elif budget_type != 'CBO':
+            # Only set default bid_strategy for ABO campaigns
+            # CBO campaigns inherit bid_strategy from campaign level
             params[AdSet.Field.bid_strategy] = 'LOWEST_COST_WITHOUT_CAP'
-            
+
         return account.create_ad_set(params=params)
 
     def upload_image(self, image_path_or_url, ad_account_id=None):
