@@ -303,16 +303,43 @@ class FacebookService:
 
     def upload_image(self, image_path_or_url, ad_account_id=None):
         """Upload an image to the ad library."""
+        import tempfile
+        import requests
+
         account = self._get_account(ad_account_id)
-            
-        # Check if it's a local file or URL
-        # For simplicity, assuming local file path or bytes for now as SDK handles it best
-        # If URL, we might need to download it first or use bytes
-        
-        image = AdImage(parent_id=account.get_id_assured())
-        image[AdImage.Field.filename] = image_path_or_url
-        image.remote_create()
-        return image[AdImage.Field.hash]
+
+        # Check if it's a URL or local file path
+        if image_path_or_url.startswith('http://') or image_path_or_url.startswith('https://'):
+            # Download the image to a temp file
+            response = requests.get(image_path_or_url, timeout=30)
+            response.raise_for_status()
+
+            # Get file extension from URL or default to .jpg
+            ext = '.jpg'
+            if '.' in image_path_or_url.split('/')[-1]:
+                ext = '.' + image_path_or_url.split('.')[-1].split('?')[0]
+
+            with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                tmp.write(response.content)
+                local_path = tmp.name
+
+            image = AdImage(parent_id=account.get_id_assured())
+            image[AdImage.Field.filename] = local_path
+            image.remote_create()
+
+            # Clean up temp file
+            try:
+                os.remove(local_path)
+            except:
+                pass
+
+            return image[AdImage.Field.hash]
+        else:
+            # Local file path
+            image = AdImage(parent_id=account.get_id_assured())
+            image[AdImage.Field.filename] = image_path_or_url
+            image.remote_create()
+            return image[AdImage.Field.hash]
 
     def create_creative(self, creative_data, ad_account_id=None):
         """Create an ad creative."""
