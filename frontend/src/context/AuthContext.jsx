@@ -47,6 +47,22 @@ export const AuthProvider = ({ children }) => {
         initAuth();
     }, []);
 
+    // Auto-refresh token every 6 days to prevent expiration (tokens last 7 days)
+    useEffect(() => {
+        if (!refreshToken) return;
+
+        const refreshInterval = setInterval(async () => {
+            try {
+                await refreshAccessToken();
+            } catch (err) {
+                // Silently fail - will retry on next interval or next API call
+                console.log('Background token refresh failed, will retry');
+            }
+        }, 6 * 24 * 60 * 60 * 1000); // 6 days in ms
+
+        return () => clearInterval(refreshInterval);
+    }, [refreshToken]);
+
     const fetchUser = async () => {
         const response = await fetch(`${API_URL}/auth/me`, {
             headers: {
@@ -184,6 +200,12 @@ export const AuthProvider = ({ children }) => {
         const data = await response.json();
         setAccessToken(data.access_token);
         localStorage.setItem('accessToken', data.access_token);
+
+        // Update refresh token if new one provided (rolling refresh)
+        if (data.refresh_token) {
+            setRefreshToken(data.refresh_token);
+            localStorage.setItem('refreshToken', data.refresh_token);
+        }
 
         // Re-fetch user data with new token
         await fetchUser();

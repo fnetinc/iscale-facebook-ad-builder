@@ -142,9 +142,9 @@ async def login_json(user_data: UserLogin, db: Session = Depends(get_db)):
     )
 
 
-@router.post("/refresh", response_model=AccessToken)
+@router.post("/refresh", response_model=Token)
 async def refresh_token(token_data: TokenRefresh, db: Session = Depends(get_db)):
-    """Get a new access token using a refresh token"""
+    """Get new access and refresh tokens using a refresh token (rolling refresh)"""
     # Find the refresh token
     refresh_token_obj = db.query(RefreshToken).filter(
         RefreshToken.token == token_data.refresh_token
@@ -174,10 +174,26 @@ async def refresh_token(token_data: TokenRefresh, db: Session = Depends(get_db))
             detail="User account is disabled"
         )
 
-    # Create new access token
-    access_token = create_access_token(data={"sub": user.id})
+    # Delete old refresh token
+    db.delete(refresh_token_obj)
 
-    return AccessToken(access_token=access_token)
+    # Create new tokens
+    access_token = create_access_token(data={"sub": user.id})
+    new_refresh_token_str, expires_at = create_refresh_token()
+
+    # Store new refresh token
+    new_refresh_token_obj = RefreshToken(
+        user_id=user.id,
+        token=new_refresh_token_str,
+        expires_at=expires_at
+    )
+    db.add(new_refresh_token_obj)
+    db.commit()
+
+    return Token(
+        access_token=access_token,
+        refresh_token=new_refresh_token_str
+    )
 
 
 @router.post("/logout")
