@@ -1,7 +1,7 @@
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import React, { useState, useEffect, useMemo } from 'react';
-import { Download, Trash2, Search, Filter, CheckSquare, Square, FileDown, ExternalLink, FileText, Image, LayoutGrid, List } from 'lucide-react';
+import { Download, Trash2, Search, Filter, CheckSquare, Square, FileDown, ExternalLink, FileText, Image, LayoutGrid, List, Film } from 'lucide-react';
 import { useBrands } from '../context/BrandContext';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
@@ -341,6 +341,8 @@ export default function GeneratedAds() {
                             const mainAd = bundle.find(ad => ad.size_name?.includes('Square')) || bundle[0];
                             const bundleId = bundle[0].ad_bundle_id || `legacy_${bundle[0].id}`;
                             const isSelected = selectedBundles.has(bundleId);
+                            const isVideo = mainAd.media_type === 'video';
+                            const mediaUrl = isVideo ? (mainAd.thumbnail_url || mainAd.video_url) : mainAd.image_url;
 
                             return (
                                 <div
@@ -349,13 +351,32 @@ export default function GeneratedAds() {
                                     className={`bg-white rounded-xl shadow-sm border-2 transition-all hover:shadow-lg cursor-pointer overflow-hidden ${isSelected ? 'border-purple-600 ring-2 ring-purple-200' : 'border-gray-200 hover:border-purple-300'
                                         }`}
                                 >
-                                    {/* Image with overlays */}
+                                    {/* Media with overlays */}
                                     <div className="relative aspect-square">
-                                        <img
-                                            src={mainAd.image_url}
-                                            alt={mainAd.headline}
-                                            className="w-full h-full object-cover"
-                                        />
+                                        {isVideo ? (
+                                            <video
+                                                src={mainAd.video_url}
+                                                poster={mainAd.thumbnail_url}
+                                                className="w-full h-full object-cover"
+                                                muted
+                                                playsInline
+                                                onMouseEnter={(e) => e.target.play()}
+                                                onMouseLeave={(e) => { e.target.pause(); e.target.currentTime = 0; }}
+                                            />
+                                        ) : (
+                                            <img
+                                                src={mediaUrl}
+                                                alt={mainAd.headline}
+                                                className="w-full h-full object-cover"
+                                            />
+                                        )}
+
+                                        {/* Media Type Badge */}
+                                        {isVideo && (
+                                            <div className="absolute top-3 right-12 bg-purple-600/90 backdrop-blur-sm text-white px-2 py-1 rounded-lg text-xs font-medium flex items-center gap-1">
+                                                <Film size={12} /> Video
+                                            </div>
+                                        )}
 
                                         {/* Select Checkbox */}
                                         <button
@@ -417,6 +438,7 @@ export default function GeneratedAds() {
                                     const mainAd = bundle.find(ad => ad.size_name?.includes('Square')) || bundle[0];
                                     const bundleId = bundle[0].ad_bundle_id || `legacy_${bundle[0].id}`;
                                     const isSelected = selectedBundles.has(bundleId);
+                                    const isVideo = mainAd.media_type === 'video';
 
                                     return (
                                         <tr
@@ -438,12 +460,26 @@ export default function GeneratedAds() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center gap-3">
-                                                    <div className="h-12 w-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 flex-shrink-0">
-                                                        <img
-                                                            src={mainAd.image_url}
-                                                            alt="Thumbnail"
-                                                            className="h-full w-full object-cover"
-                                                        />
+                                                    <div className="h-12 w-12 rounded-lg overflow-hidden bg-gray-100 border border-gray-200 flex-shrink-0 relative">
+                                                        {isVideo ? (
+                                                            <>
+                                                                <video
+                                                                    src={mainAd.video_url}
+                                                                    poster={mainAd.thumbnail_url}
+                                                                    className="h-full w-full object-cover"
+                                                                    muted
+                                                                />
+                                                                <div className="absolute bottom-0 right-0 bg-purple-600 text-white p-0.5 rounded-tl">
+                                                                    <Film size={10} />
+                                                                </div>
+                                                            </>
+                                                        ) : (
+                                                            <img
+                                                                src={mainAd.image_url}
+                                                                alt="Thumbnail"
+                                                                className="h-full w-full object-cover"
+                                                            />
+                                                        )}
                                                     </div>
                                                     <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
                                                         {bundle.length} Size{bundle.length > 1 ? 's' : ''}
@@ -538,14 +574,22 @@ export default function GeneratedAds() {
                             {/* Modal Content */}
                             <div className="p-6">
                                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                    {/* Image Preview Section */}
+                                    {/* Media Preview Section */}
                                     <div className="space-y-4">
-                                        {/* Main Image */}
-                                        <div className="bg-gray-100 rounded-xl overflow-hidden aspect-square flex items-center justify-center">
+                                        {/* Main Media */}
+                                        <div className="bg-gray-100 rounded-xl overflow-hidden aspect-square flex items-center justify-center relative">
                                             {imgError ? (
                                                 <div className="p-8 text-center text-red-500 bg-red-50">
-                                                    <p className="font-bold mb-2">Failed to load image</p>
+                                                    <p className="font-bold mb-2">Failed to load media</p>
                                                 </div>
+                                            ) : viewedImage.media_type === 'video' ? (
+                                                <video
+                                                    src={viewedImage.video_url}
+                                                    poster={viewedImage.thumbnail_url}
+                                                    className="w-full h-full object-contain"
+                                                    controls
+                                                    onError={() => setImgError(true)}
+                                                />
                                             ) : (
                                                 <img
                                                     src={viewedImage.image_url}
@@ -554,6 +598,11 @@ export default function GeneratedAds() {
                                                     onError={() => setImgError(true)}
                                                 />
                                             )}
+                                            {viewedImage.media_type === 'video' && (
+                                                <div className="absolute top-3 right-3 bg-purple-600/90 backdrop-blur-sm text-white px-2 py-1 rounded-lg text-xs font-medium flex items-center gap-1">
+                                                    <Film size={12} /> Video
+                                                </div>
+                                            )}
                                         </div>
 
                                         {/* Bundle Thumbnails */}
@@ -561,28 +610,45 @@ export default function GeneratedAds() {
                                             <div>
                                                 <p className="text-sm font-medium text-gray-700 mb-2">Available Sizes:</p>
                                                 <div className="flex gap-2 overflow-x-auto pb-2">
-                                                    {currentBundle.map((ad, idx) => (
-                                                        <button
-                                                            key={idx}
-                                                            onClick={() => {
-                                                                setViewedImage(ad);
-                                                                setImgError(false);
-                                                            }}
-                                                            className={`relative w-20 h-20 rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${viewedImage.id === ad.id
-                                                                ? 'border-amber-600 ring-2 ring-amber-200'
-                                                                : 'border-gray-200 hover:border-amber-300'
-                                                                }`}
-                                                        >
-                                                            <img
-                                                                src={ad.image_url}
-                                                                alt={ad.size_name}
-                                                                className="w-full h-full object-cover"
-                                                            />
-                                                            <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] py-0.5 text-center truncate px-1">
-                                                                {(ad.size_name || '').split(' ')[0]}
-                                                            </div>
-                                                        </button>
-                                                    ))}
+                                                    {currentBundle.map((ad, idx) => {
+                                                        const isAdVideo = ad.media_type === 'video';
+                                                        return (
+                                                            <button
+                                                                key={idx}
+                                                                onClick={() => {
+                                                                    setViewedImage(ad);
+                                                                    setImgError(false);
+                                                                }}
+                                                                className={`relative w-20 h-20 rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${viewedImage.id === ad.id
+                                                                    ? 'border-amber-600 ring-2 ring-amber-200'
+                                                                    : 'border-gray-200 hover:border-amber-300'
+                                                                    }`}
+                                                            >
+                                                                {isAdVideo ? (
+                                                                    <video
+                                                                        src={ad.video_url}
+                                                                        poster={ad.thumbnail_url}
+                                                                        className="w-full h-full object-cover"
+                                                                        muted
+                                                                    />
+                                                                ) : (
+                                                                    <img
+                                                                        src={ad.image_url}
+                                                                        alt={ad.size_name}
+                                                                        className="w-full h-full object-cover"
+                                                                    />
+                                                                )}
+                                                                {isAdVideo && (
+                                                                    <div className="absolute top-1 right-1 bg-purple-600 text-white p-0.5 rounded">
+                                                                        <Film size={8} />
+                                                                    </div>
+                                                                )}
+                                                                <div className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] py-0.5 text-center truncate px-1">
+                                                                    {(ad.size_name || '').split(' ')[0]}
+                                                                </div>
+                                                            </button>
+                                                        );
+                                                    })}
                                                 </div>
                                             </div>
                                         )}
@@ -616,13 +682,21 @@ export default function GeneratedAds() {
                                             </div>
                                         </div>
 
-                                        {/* Image Details */}
+                                        {/* Media Details */}
                                         <div className="bg-gray-50 p-5 rounded-xl border border-gray-200">
                                             <h4 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-                                                <Image size={20} className="text-gray-600" />
-                                                Image Details
+                                                {viewedImage.media_type === 'video' ? (
+                                                    <Film size={20} className="text-purple-600" />
+                                                ) : (
+                                                    <Image size={20} className="text-gray-600" />
+                                                )}
+                                                {viewedImage.media_type === 'video' ? 'Video Details' : 'Image Details'}
                                             </h4>
                                             <div className="space-y-2 text-sm">
+                                                <div className="flex justify-between">
+                                                    <span className="text-gray-500">Type:</span>
+                                                    <span className="font-medium text-gray-900 capitalize">{viewedImage.media_type || 'image'}</span>
+                                                </div>
                                                 <div className="flex justify-between">
                                                     <span className="text-gray-500">Size:</span>
                                                     <span className="font-medium text-gray-900">{viewedImage.size_name}</span>
@@ -635,19 +709,25 @@ export default function GeneratedAds() {
                                                     <span className="text-gray-500">Created:</span>
                                                     <span className="font-medium text-gray-900">{new Date(viewedImage.created_at).toLocaleString()}</span>
                                                 </div>
+                                                {viewedImage.video_id && (
+                                                    <div className="flex justify-between">
+                                                        <span className="text-gray-500">FB Video ID:</span>
+                                                        <span className="font-medium text-gray-900 text-xs">{viewedImage.video_id}</span>
+                                                    </div>
+                                                )}
                                             </div>
                                         </div>
 
                                         {/* Download Button */}
                                         <a
-                                            href={viewedImage.image_url}
-                                            download={`ad-${viewedImage.size_name || 'image'}-${Date.now()}.png`}
+                                            href={viewedImage.media_type === 'video' ? viewedImage.video_url : viewedImage.image_url}
+                                            download={`ad-${viewedImage.size_name || 'media'}-${Date.now()}.${viewedImage.media_type === 'video' ? 'mp4' : 'png'}`}
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             className="w-full py-3 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-bold flex items-center justify-center gap-2 transition-colors"
                                         >
                                             <Download size={20} />
-                                            Download Image
+                                            Download {viewedImage.media_type === 'video' ? 'Video' : 'Image'}
                                         </a>
                                     </div>
                                 </div>

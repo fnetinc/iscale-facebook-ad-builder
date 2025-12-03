@@ -1,7 +1,7 @@
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import React, { useState } from 'react';
-import { ChevronRight, Plus, Trash2, Loader } from 'lucide-react';
+import { ChevronRight, Plus, Trash2, Loader, Film, Image } from 'lucide-react';
 import { useCampaign } from '../context/CampaignContext';
 import { createCompleteAd, createFacebookCampaign, createFacebookAdSet } from '../lib/facebookApi';
 
@@ -22,17 +22,20 @@ const BulkAdCreation = ({ onNext, onBack }) => {
             const validHeadlines = creativeData.headlines.filter(h => h && h.trim() !== '');
             const validBodies = creativeData.bodies.filter(b => b && b.trim() !== '');
 
-            // Generate all permutations: images × headlines × bodies
+            // Generate all permutations: media × headlines × bodies
             const permutations = [];
             creativeData.creatives.forEach((creative, creativeIndex) => {
                 validHeadlines.forEach((headline, hIndex) => {
                     validBodies.forEach((body, bIndex) => {
+                        const isVideo = creative.mediaType === 'video';
+                        const mediaLabel = isVideo ? 'Video' : 'Image';
                         permutations.push({
                             id: `ad_${Date.now()}_${creativeIndex}_${hIndex}_${bIndex}`,
-                            name: `${creative.name || `Image ${creativeIndex + 1}`} - H${hIndex + 1}B${bIndex + 1}`,
+                            name: `${creative.name || `${mediaLabel} ${creativeIndex + 1}`} - H${hIndex + 1}B${bIndex + 1}`,
                             creativeId: creative.id,
                             headlineIndex: hIndex,
                             bodyIndex: bIndex,
+                            mediaType: creative.mediaType || 'image',
                             useDefaultCreative: true
                         });
                     });
@@ -40,7 +43,9 @@ const BulkAdCreation = ({ onNext, onBack }) => {
             });
 
             setAdsData(permutations);
-            console.log(`Generated ${permutations.length} ad permutations (${creativeData.creatives.length} images × ${validHeadlines.length} headlines × ${validBodies.length} bodies)`);
+            const imageCount = creativeData.creatives.filter(c => c.mediaType !== 'video').length;
+            const videoCount = creativeData.creatives.filter(c => c.mediaType === 'video').length;
+            console.log(`Generated ${permutations.length} ad permutations (${imageCount} images + ${videoCount} videos × ${validHeadlines.length} headlines × ${validBodies.length} bodies)`);
         } else {
             // Fallback if no creatives (shouldn't happen due to validation)
             setAdsData([]);
@@ -148,12 +153,16 @@ const BulkAdCreation = ({ onNext, onBack }) => {
                 try {
                     // Find the specific creative for this ad
                     const specificCreative = creativeData.creatives?.find(c => c.id === ad.creativeId);
+                    const isVideo = specificCreative?.mediaType === 'video';
 
                     // Construct creative data for this specific ad with specific headline and body
                     const adSpecificCreativeData = {
                         ...creativeData,
-                        imageUrl: specificCreative ? (specificCreative.imageUrl || specificCreative.previewUrl) : '',
-                        imageFile: specificCreative ? specificCreative.file : null,
+                        mediaType: isVideo ? 'video' : 'image',
+                        imageUrl: !isVideo ? (specificCreative?.imageUrl || specificCreative?.previewUrl) : undefined,
+                        videoUrl: isVideo ? (specificCreative?.videoUrl || specificCreative?.previewUrl) : undefined,
+                        imageFile: !isVideo && specificCreative ? specificCreative.file : null,
+                        videoFile: isVideo && specificCreative ? specificCreative.file : null,
                         // Use specific headline and body for this ad permutation
                         headlines: [creativeData.headlines[ad.headlineIndex]],
                         bodies: [creativeData.bodies[ad.bodyIndex]]
@@ -163,7 +172,15 @@ const BulkAdCreation = ({ onNext, onBack }) => {
                         throw new Error('Page ID is missing. Please go back to the Creative step and select a Facebook Page.');
                     }
 
-                    console.log('Submitting Ad with Page ID:', creativeData.pageId);
+                    console.log(`Submitting ${isVideo ? 'Video' : 'Image'} Ad with Page ID:`, creativeData.pageId);
+
+                    // Update progress with video-specific message
+                    if (isVideo) {
+                        setProgress(prev => ({
+                            ...prev,
+                            status: `Uploading video ${i + 1} of ${adsData.length}... (this may take a while)`
+                        }));
+                    }
 
                     // Create ad on Facebook
                     const result = await createCompleteAd(
@@ -185,7 +202,11 @@ const BulkAdCreation = ({ onNext, onBack }) => {
                             adsetId: adsetData.id,
                             name: ad.name,
                             creativeName: creativeData.creativeName,
-                            imageUrl: adSpecificCreativeData.imageUrl, // Use specific image
+                            mediaType: isVideo ? 'video' : 'image',
+                            imageUrl: adSpecificCreativeData.imageUrl,
+                            videoUrl: adSpecificCreativeData.videoUrl,
+                            videoId: result.videoId,
+                            thumbnailUrl: result.thumbnailUrl,
                             bodies: creativeData.bodies.filter(b => b.trim() !== ''),
                             headlines: creativeData.headlines.filter(h => h.trim() !== ''),
                             description: creativeData.description,
@@ -200,7 +221,8 @@ const BulkAdCreation = ({ onNext, onBack }) => {
                     createdAds.push({
                         ...ad,
                         fbAdId: result.adId,
-                        fbCreativeId: result.creativeId
+                        fbCreativeId: result.creativeId,
+                        videoId: result.videoId
                     });
                 } catch (error) {
                     console.error(`Error creating ad ${ad.name}:`, error);
@@ -246,7 +268,17 @@ const BulkAdCreation = ({ onNext, onBack }) => {
                         <div><strong>Ad Set Budget:</strong> ${Number(adsetData.dailyBudget).toFixed(2)} / day</div>
                     )}
                     <div><strong>Creative Name:</strong> {creativeData.creativeName}</div>
-                    <div><strong>Images:</strong> {creativeData.creatives?.length || 0} files</div>
+                    <div>
+                        <strong>Media:</strong>{' '}
+                        {(() => {
+                            const images = creativeData.creatives?.filter(c => c.mediaType !== 'video').length || 0;
+                            const videos = creativeData.creatives?.filter(c => c.mediaType === 'video').length || 0;
+                            const parts = [];
+                            if (images > 0) parts.push(`${images} image${images !== 1 ? 's' : ''}`);
+                            if (videos > 0) parts.push(`${videos} video${videos !== 1 ? 's' : ''}`);
+                            return parts.join(', ') || '0 files';
+                        })()}
+                    </div>
                     <div><strong>Ad Copy:</strong> Standard (Single Body & Headline)</div>
                 </div>
             </div>
@@ -255,35 +287,57 @@ const BulkAdCreation = ({ onNext, onBack }) => {
                 <>
                     {/* Ads List */}
                     <div className="space-y-2 mb-4">
-                        {adsData.map((ad, index) => (
-                            <div key={ad.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                                {/* Thumbnail */}
-                                {creativeData.creatives?.find(c => c.id === ad.creativeId) && (
-                                    <div className="w-12 h-12 rounded overflow-hidden bg-gray-200 flex-shrink-0">
-                                        <img
-                                            src={creativeData.creatives.find(c => c.id === ad.creativeId).previewUrl}
-                                            alt="Thumbnail"
-                                            className="w-full h-full object-cover"
+                        {adsData.map((ad, index) => {
+                            const creative = creativeData.creatives?.find(c => c.id === ad.creativeId);
+                            const isVideo = creative?.mediaType === 'video';
+                            return (
+                                <div key={ad.id} className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
+                                    {/* Thumbnail */}
+                                    {creative && (
+                                        <div className="w-12 h-12 rounded overflow-hidden bg-gray-200 flex-shrink-0 relative">
+                                            {isVideo ? (
+                                                <>
+                                                    <video
+                                                        src={creative.previewUrl}
+                                                        className="w-full h-full object-cover"
+                                                        muted
+                                                    />
+                                                    <div className="absolute bottom-0 right-0 bg-purple-600 text-white p-0.5 rounded-tl">
+                                                        <Film size={10} />
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <img
+                                                        src={creative.previewUrl}
+                                                        alt="Thumbnail"
+                                                        className="w-full h-full object-cover"
+                                                    />
+                                                    <div className="absolute bottom-0 right-0 bg-blue-600 text-white p-0.5 rounded-tl">
+                                                        <Image size={10} />
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                    <div className="flex-1">
+                                        <input
+                                            type="text"
+                                            value={ad.name}
+                                            onChange={(e) => updateAdName(index, e.target.value)}
+                                            placeholder={`Ad ${index + 1} name`}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                         />
                                     </div>
-                                )}
-                                <div className="flex-1">
-                                    <input
-                                        type="text"
-                                        value={ad.name}
-                                        onChange={(e) => updateAdName(index, e.target.value)}
-                                        placeholder={`Ad ${index + 1} name`}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    />
+                                    <button
+                                        onClick={() => removeAd(index)}
+                                        className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
+                                    >
+                                        <Trash2 size={20} />
+                                    </button>
                                 </div>
-                                <button
-                                    onClick={() => removeAd(index)}
-                                    className="p-2 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition-colors"
-                                >
-                                    <Trash2 size={20} />
-                                </button>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
                     {/* Add Ad Button */}

@@ -180,6 +180,102 @@ export const searchGeoLocations = async (query, adAccountId) => {
 
 
 /**
+ * Upload video to Facebook
+ * @param {string} videoUrl - URL of the video to upload
+ * @param {string} adAccountId - Facebook ad account ID
+ * @param {boolean} waitForReady - Whether to wait for video processing (default true)
+ * @param {number} timeout - Max seconds to wait for processing (default 600)
+ * @returns {Promise<{video_id: string, status: string, thumbnails: string[]}>}
+ */
+export async function uploadVideoToFacebook(videoUrl, adAccountId, waitForReady = true, timeout = 600) {
+    try {
+        let finalVideoUrl = videoUrl;
+
+        // If it's a blob URL, upload to our server first
+        if (videoUrl.startsWith('blob:')) {
+            const blobResponse = await fetch(videoUrl);
+            const blob = await blobResponse.blob();
+
+            const formData = new FormData();
+            const extension = blob.type.split('/')[1] || 'mp4';
+            formData.append('file', blob, `upload.${extension}`);
+
+            const uploadResponse = await authFetch((import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1') + '/uploads/', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!uploadResponse.ok) {
+                throw new Error('Failed to upload video to server');
+            }
+
+            const uploadResult = await uploadResponse.json();
+            finalVideoUrl = uploadResult.url.startsWith('/') ? uploadResult.url.substring(1) : uploadResult.url;
+        }
+
+        const response = await authFetch(`${API_BASE_URL}/upload-video?ad_account_id=${adAccountId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                video_url: finalVideoUrl,
+                wait_for_ready: waitForReady,
+                timeout: timeout
+            })
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to upload video to Facebook');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error uploading video:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get video processing status
+ * @param {string} videoId - Facebook video ID
+ * @returns {Promise<{status: string, video_id: string, length?: number}>}
+ */
+export async function getVideoStatus(videoId) {
+    try {
+        const response = await authFetch(`${API_BASE_URL}/video-status/${videoId}`);
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to get video status');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error getting video status:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get video thumbnails
+ * @param {string} videoId - Facebook video ID
+ * @returns {Promise<{thumbnails: string[]}>}
+ */
+export async function getVideoThumbnails(videoId) {
+    try {
+        const response = await authFetch(`${API_BASE_URL}/video-thumbnails/${videoId}`);
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.detail || 'Failed to get video thumbnails');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error getting video thumbnails:', error);
+        throw error;
+    }
+}
+
+/**
  * Upload image to Facebook
  */
 export async function uploadImageToFacebook(imageUrl, adAccountId) {
@@ -304,18 +400,32 @@ export async function createFacebookAdSet(adsetData, campaignId, adAccountId, bu
 }
 
 /**
- * Create Facebook Ad Creative
+ * Create Facebook Ad Creative (supports both image and video)
+ * @param {Object} creativeData - Creative data including bodies, headlines, websiteUrl
+ * @param {string|null} imageHash - Image hash for image ads (null for video)
+ * @param {string} pageId - Facebook page ID
+ * @param {string} adAccountId - Facebook ad account ID
+ * @param {Object|null} videoData - Video data: { video_id, thumbnail_url } for video ads
  */
-export async function createFacebookCreative(creativeData, imageHash, pageId, adAccountId) {
+export async function createFacebookCreative(creativeData, imageHash, pageId, adAccountId, videoData = null) {
     try {
         const payload = {
             ...creativeData,
-            image_hash: imageHash,
             page_id: pageId,
             primary_text: creativeData.bodies[0],
             headline: creativeData.headlines[0],
             website_url: creativeData.websiteUrl
         };
+
+        // Add image or video data
+        if (videoData && videoData.video_id) {
+            payload.video_id = videoData.video_id;
+            if (videoData.thumbnail_url) {
+                payload.thumbnail_url = videoData.thumbnail_url;
+            }
+        } else if (imageHash) {
+            payload.image_hash = imageHash;
+        }
 
         const response = await authFetch(`${API_BASE_URL}/creatives?ad_account_id=${adAccountId}`, {
             method: 'POST',
@@ -389,27 +499,57 @@ export async function searchLocations(query, type = 'city', adAccountId) {
 
 
 /**
- * Complete workflow: Upload image, create creative, and create ad
+ * Complete workflow: Upload media (image or video), create creative, and create ad
+ * @param {string} campaignId - Campaign ID
+ * @param {Object} adsetData - Ad set data with fbAdsetId
+ * @param {Object} creativeData - Creative data with imageUrl or videoUrl
+ * @param {Object} adData - Ad data
+ * @param {string} pageId - Facebook page ID
+ * @param {string} adAccountId - Facebook ad account ID
+ * @param {string} budgetType - Budget type (CBO or ABO)
  */
 export async function createCompleteAd(campaignId, adsetData, creativeData, adData, pageId, adAccountId, budgetType) {
     try {
-        // 1. Upload image
-        const imageHash = await uploadImageToFacebook(creativeData.imageUrl, adAccountId);
+        let imageHash = null;
+        let videoData = null;
 
-        // 2. Create ad creative
-        const creativeId = await createFacebookCreative(creativeData, imageHash, pageId, adAccountId);
+        // Determine if this is a video or image ad
+        const isVideo = creativeData.mediaType === 'video' ||
+                        (creativeData.videoUrl && !creativeData.imageUrl);
+
+        if (isVideo) {
+            // 1. Upload video
+            const videoResult = await uploadVideoToFacebook(
+                creativeData.videoUrl,
+                adAccountId,
+                true, // wait for ready
+                600   // 10 minute timeout
+            );
+
+            videoData = {
+                video_id: videoResult.video_id,
+                thumbnail_url: creativeData.thumbnailUrl || (videoResult.thumbnails && videoResult.thumbnails[0])
+            };
+        } else {
+            // 1. Upload image
+            imageHash = await uploadImageToFacebook(creativeData.imageUrl, adAccountId);
+        }
+
+        // 2. Create ad creative (supports both image and video)
+        const creativeId = await createFacebookCreative(
+            creativeData,
+            imageHash,
+            pageId,
+            adAccountId,
+            videoData
+        );
 
         // 3. Create ad
-        // Note: We need the adset ID. This function signature assumes adsetData contains the ID or we create it here?
-        // The original function took adsetData and created the adset? No, wait.
-        // Original: createCompleteAd(campaignId, adsetData, creativeData, adData, pageId, adAccountId, budgetType)
-        // It calls createFacebookAd with adsetData.fbAdsetId.
-        // So adsetData must have the ID.
-
         const adId = await createFacebookAd(adData, adsetData.fbAdsetId, creativeId, adAccountId);
 
         return {
             imageHash,
+            videoId: videoData?.video_id || null,
             creativeId,
             adId
         };

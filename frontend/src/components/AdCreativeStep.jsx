@@ -1,8 +1,11 @@
 import { useToast } from '../context/ToastContext';
 import React, { useState, useEffect } from 'react';
-import { ChevronRight, Upload, X, Loader, Trash2 } from 'lucide-react';
+import { ChevronRight, Upload, X, Loader, Trash2, Film, Image } from 'lucide-react';
 import { useCampaign } from '../context/CampaignContext';
 import { getPages } from '../lib/facebookApi';
+
+const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
+const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'];
 
 const CTA_OPTIONS = [
     'APPLY_NOW',
@@ -67,20 +70,26 @@ const AdCreativeStep = ({ onNext, onBack }) => {
         const files = Array.from(e.dataTransfer.files);
         if (files.length === 0) return;
 
-        // Filter for images only
-        const imageFiles = files.filter(file => file.type.startsWith('image/'));
+        // Filter for images and videos
+        const mediaFiles = files.filter(file =>
+            ALLOWED_IMAGE_TYPES.includes(file.type) || ALLOWED_VIDEO_TYPES.includes(file.type)
+        );
 
-        if (imageFiles.length === 0) {
-            showWarning('Please drop image files only');
+        if (mediaFiles.length === 0) {
+            showWarning('Please drop image or video files only');
             return;
         }
 
-        const newCreatives = imageFiles.map(file => ({
-            id: `creative_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            file,
-            previewUrl: URL.createObjectURL(file),
-            name: file.name
-        }));
+        const newCreatives = mediaFiles.map(file => {
+            const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
+            return {
+                id: `creative_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                file,
+                previewUrl: URL.createObjectURL(file),
+                name: file.name,
+                mediaType: isVideo ? 'video' : 'image'
+            };
+        });
 
         setCreativeData(prev => ({
             ...prev,
@@ -278,16 +287,20 @@ const AdCreativeStep = ({ onNext, onBack }) => {
         }
     };
 
-    const handleImageUpload = (e) => {
+    const handleMediaUpload = (e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
 
-        const newCreatives = files.map(file => ({
-            id: `creative_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-            file,
-            previewUrl: URL.createObjectURL(file),
-            name: file.name
-        }));
+        const newCreatives = files.map(file => {
+            const isVideo = ALLOWED_VIDEO_TYPES.includes(file.type);
+            return {
+                id: `creative_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+                file,
+                previewUrl: URL.createObjectURL(file),
+                name: file.name,
+                mediaType: isVideo ? 'video' : 'image'
+            };
+        });
 
         setCreativeData(prev => ({
             ...prev,
@@ -309,7 +322,7 @@ const AdCreativeStep = ({ onNext, onBack }) => {
             return;
         }
         if (!creativeData.creatives || creativeData.creatives.length === 0) {
-            showWarning('Please upload at least one ad image');
+            showWarning('Please upload at least one image or video');
             return;
         }
 
@@ -434,10 +447,10 @@ const AdCreativeStep = ({ onNext, onBack }) => {
                     )}
                 </div>
 
-                {/* Image Upload */}
+                {/* Media Upload (Images + Videos) */}
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                        Ad Images *
+                        Ad Media (Images or Videos) *
                     </label>
 
                     {/* Upload Area */}
@@ -451,37 +464,63 @@ const AdCreativeStep = ({ onNext, onBack }) => {
                     >
                         <input
                             type="file"
-                            accept="image/*"
+                            accept="image/*,video/*"
                             multiple
-                            onChange={handleImageUpload}
+                            onChange={handleMediaUpload}
                             className="hidden"
-                            id="ad-image-upload"
+                            id="ad-media-upload"
                         />
-                        <label htmlFor="ad-image-upload" className="cursor-pointer flex flex-col items-center">
-                            <Upload className={`mb-2 ${isDragging ? 'text-amber-500' : 'text-gray-400'}`} size={32} />
+                        <label htmlFor="ad-media-upload" className="cursor-pointer flex flex-col items-center">
+                            <div className="flex gap-2 mb-2">
+                                <Image className={`${isDragging ? 'text-amber-500' : 'text-gray-400'}`} size={28} />
+                                <Film className={`${isDragging ? 'text-amber-500' : 'text-gray-400'}`} size={28} />
+                            </div>
                             <span className={`font-medium ${isDragging ? 'text-amber-700' : 'text-gray-600'}`}>
-                                {isDragging ? 'Drop images here' : 'Click to upload images'}
+                                {isDragging ? 'Drop files here' : 'Click to upload images or videos'}
                             </span>
                             <span className="text-sm text-gray-400 mt-1">or drag and drop</span>
-                            <span className="text-xs text-amber-500 mt-2 bg-amber-50 px-2 py-1 rounded">Supports multiple files</span>
+                            <span className="text-xs text-amber-500 mt-2 bg-amber-50 px-2 py-1 rounded">Supports multiple files • Videos up to 500MB</span>
                         </label>
                     </div>
 
-                    {/* Image Grid */}
+                    {/* Media Grid */}
                     {creativeData.creatives && creativeData.creatives.length > 0 && (
                         <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4">
                             {creativeData.creatives.map((creative) => (
                                 <div key={creative.id} className="relative group border rounded-lg overflow-hidden aspect-square bg-gray-100">
-                                    <img
-                                        src={creative.previewUrl}
-                                        alt={creative.name}
-                                        className="w-full h-full object-cover"
-                                    />
+                                    {creative.mediaType === 'video' ? (
+                                        <video
+                                            src={creative.previewUrl}
+                                            className="w-full h-full object-cover"
+                                            muted
+                                            playsInline
+                                            onMouseEnter={(e) => e.target.play()}
+                                            onMouseLeave={(e) => { e.target.pause(); e.target.currentTime = 0; }}
+                                        />
+                                    ) : (
+                                        <img
+                                            src={creative.previewUrl}
+                                            alt={creative.name}
+                                            className="w-full h-full object-cover"
+                                        />
+                                    )}
+                                    {/* Media type badge */}
+                                    <div className="absolute top-2 left-2">
+                                        {creative.mediaType === 'video' ? (
+                                            <span className="bg-purple-600 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                                                <Film size={12} /> Video
+                                            </span>
+                                        ) : (
+                                            <span className="bg-blue-600 text-white text-xs px-2 py-1 rounded flex items-center gap-1">
+                                                <Image size={12} /> Image
+                                            </span>
+                                        )}
+                                    </div>
                                     <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all flex items-center justify-center opacity-0 group-hover:opacity-100">
                                         <button
                                             onClick={() => removeCreative(creative.id)}
                                             className="p-2 bg-red-500 text-white rounded-full hover:bg-red-600 transform scale-90 hover:scale-100 transition-all"
-                                            title="Remove image"
+                                            title="Remove media"
                                         >
                                             <Trash2 size={16} />
                                         </button>
@@ -496,18 +535,22 @@ const AdCreativeStep = ({ onNext, onBack }) => {
 
                     {/* URL Input (Optional fallback) */}
                     <div className="mt-2">
-                        <p className="text-sm text-gray-500 mb-1">Or paste an image URL (adds as single image):</p>
+                        <p className="text-sm text-gray-500 mb-1">Or paste a media URL (image or video):</p>
                         <input
                             type="text"
-                            placeholder="https://example.com/image.jpg"
+                            placeholder="https://example.com/image.jpg or https://example.com/video.mp4"
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent text-sm"
                             onBlur={(e) => {
                                 if (e.target.value) {
+                                    const url = e.target.value.toLowerCase();
+                                    const isVideo = url.endsWith('.mp4') || url.endsWith('.mov') || url.endsWith('.webm') || url.endsWith('.avi');
                                     const newCreative = {
                                         id: `creative_url_${Date.now()}`,
                                         previewUrl: e.target.value,
-                                        imageUrl: e.target.value, // For URL based
-                                        name: 'Image from URL'
+                                        imageUrl: isVideo ? undefined : e.target.value,
+                                        videoUrl: isVideo ? e.target.value : undefined,
+                                        name: isVideo ? 'Video from URL' : 'Image from URL',
+                                        mediaType: isVideo ? 'video' : 'image'
                                     };
                                     setCreativeData(prev => ({
                                         ...prev,
@@ -638,11 +681,16 @@ const AdCreativeStep = ({ onNext, onBack }) => {
                                     const validHeadlines = creativeData.headlines.filter(h => h && h.trim() !== '').length;
                                     const validBodies = creativeData.bodies.filter(b => b && b.trim() !== '').length;
                                     const totalAds = creativeData.creatives.length * validHeadlines * validBodies;
+                                    const imageCount = creativeData.creatives.filter(c => c.mediaType !== 'video').length;
+                                    const videoCount = creativeData.creatives.filter(c => c.mediaType === 'video').length;
+                                    const mediaDesc = [];
+                                    if (imageCount > 0) mediaDesc.push(`${imageCount} image${imageCount !== 1 ? 's' : ''}`);
+                                    if (videoCount > 0) mediaDesc.push(`${videoCount} video${videoCount !== 1 ? 's' : ''}`);
                                     return (
                                         <>
                                             {totalAds} ad{totalAds !== 1 ? 's' : ''} will be created
                                             <span className="text-sm font-normal ml-2">
-                                                ({creativeData.creatives.length} image{creativeData.creatives.length !== 1 ? 's' : ''} × {validHeadlines} headline{validHeadlines !== 1 ? 's' : ''} × {validBodies} bod{validBodies !== 1 ? 'ies' : 'y'})
+                                                ({mediaDesc.join(' + ')} × {validHeadlines} headline{validHeadlines !== 1 ? 's' : ''} × {validBodies} bod{validBodies !== 1 ? 'ies' : 'y'})
                                             </span>
                                         </>
                                     );

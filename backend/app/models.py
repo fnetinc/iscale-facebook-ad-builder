@@ -254,7 +254,7 @@ class GeneratedAd(Base):
     brand_id = Column(String, ForeignKey("brands.id", ondelete="SET NULL"), nullable=True)
     product_id = Column(String, ForeignKey("products.id", ondelete="SET NULL"), nullable=True) # Assuming product_id is also FK, though not explicit in original schema it makes sense
     template_id = Column(String, ForeignKey("winning_ads.id", ondelete="SET NULL"), nullable=True)
-    image_url = Column(String, nullable=False)
+    image_url = Column(String, nullable=True)  # Changed to nullable for video ads
     headline = Column(String, nullable=True)
     body = Column(Text, nullable=True)
     cta = Column(String, nullable=True)
@@ -263,6 +263,11 @@ class GeneratedAd(Base):
     prompt = Column(Text, nullable=True)
     ad_bundle_id = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Video support fields
+    media_type = Column(String, default='image')  # 'image' or 'video'
+    video_url = Column(String, nullable=True)
+    video_id = Column(String, nullable=True)  # Facebook video ID
+    thumbnail_url = Column(String, nullable=True)
 
     brand = relationship("Brand", back_populates="generated_ads")
     template = relationship("WinningAd", back_populates="generated_ads")

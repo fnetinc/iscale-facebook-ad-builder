@@ -88,7 +88,7 @@ class GeneratedAdCreate(BaseModel):
     brandId: Optional[str] = None
     productId: Optional[str] = None
     templateId: Optional[str] = None
-    imageUrl: str
+    imageUrl: Optional[str] = None  # Now optional for video ads
     headline: Optional[str] = None
     body: Optional[str] = None
     cta: Optional[str] = None
@@ -96,6 +96,11 @@ class GeneratedAdCreate(BaseModel):
     dimensions: Optional[str] = None
     prompt: Optional[str] = None
     adBundleId: Optional[str] = None
+    # Video support fields
+    mediaType: Optional[str] = 'image'  # 'image' or 'video'
+    videoUrl: Optional[str] = None
+    videoId: Optional[str] = None  # Facebook video ID
+    thumbnailUrl: Optional[str] = None
 
 class BatchSaveRequest(BaseModel):
     ads: List[GeneratedAdCreate]
@@ -267,7 +272,12 @@ def get_generated_ads(
         "dimensions": ad.dimensions,
         "prompt": ad.prompt,
         "ad_bundle_id": ad.ad_bundle_id,
-        "created_at": ad.created_at.isoformat() if ad.created_at else None
+        "created_at": ad.created_at.isoformat() if ad.created_at else None,
+        # Video support fields
+        "media_type": ad.media_type or 'image',
+        "video_url": ad.video_url,
+        "video_id": ad.video_id,
+        "thumbnail_url": ad.thumbnail_url
     } for ad in ads]
 
 @router.delete("/{ad_id}")
@@ -307,10 +317,10 @@ def export_ads_csv(
     
     # Write header
     writer.writerow([
-        "ID", "Brand ID", "Headline", "Body", "CTA", 
-        "Size", "Dimensions", "Image URL", "Created At"
+        "ID", "Brand ID", "Headline", "Body", "CTA",
+        "Size", "Dimensions", "Media Type", "Image URL", "Video URL", "Video ID", "Thumbnail URL", "Created At"
     ])
-    
+
     # Write data
     for ad in ads:
         writer.writerow([
@@ -321,7 +331,11 @@ def export_ads_csv(
             ad.cta or "",
             ad.size_name or "",
             ad.dimensions or "",
+            ad.media_type or "image",
             ad.image_url or "",
+            ad.video_url or "",
+            ad.video_id or "",
+            ad.thumbnail_url or "",
             ad.created_at.isoformat() if ad.created_at else ""
         ])
     
@@ -360,7 +374,12 @@ def batch_save_ads(
             size_name=ad_data.sizeName,
             dimensions=ad_data.dimensions,
             prompt=ad_data.prompt,
-            ad_bundle_id=ad_data.adBundleId
+            ad_bundle_id=ad_data.adBundleId,
+            # Video support fields
+            media_type=ad_data.mediaType or 'image',
+            video_url=ad_data.videoUrl,
+            video_id=ad_data.videoId,
+            thumbnail_url=ad_data.thumbnailUrl
         )
         db.add(new_ad)
         saved_ads.append(new_ad)

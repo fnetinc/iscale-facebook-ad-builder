@@ -305,11 +305,11 @@ def upload_video(
         status: 'processing', 'ready', or 'error'
         thumbnails: List of auto-generated thumbnail URLs (if ready)
     """
-    try:
-        video_url = data.get("video_url")
-        if not video_url:
-            raise HTTPException(status_code=400, detail="video_url is required")
+    video_url = data.get("video_url")
+    if not video_url:
+        raise HTTPException(status_code=400, detail="video_url is required")
 
+    try:
         wait_for_ready = data.get("wait_for_ready", True)
         timeout = data.get("timeout", 600)
 
@@ -320,6 +320,8 @@ def upload_video(
             timeout=timeout
         )
         return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
