@@ -240,13 +240,18 @@ def save_ad_locally(
     try:
         # Check if adset exists locally, if not we might need to create it or handle error
         # For now, assuming adset exists or we just save the ID
-        
+
         new_ad = FacebookAd(
             id=ad_data.get('id'),
             adset_id=ad_data.get('adsetId'),
             name=ad_data.get('name'),
             creative_name=ad_data.get('creativeName'),
             image_url=ad_data.get('imageUrl'),
+            # Video support fields
+            media_type=ad_data.get('mediaType', 'image'),
+            video_url=ad_data.get('videoUrl'),
+            video_id=ad_data.get('videoId'),
+            thumbnail_url=ad_data.get('thumbnailUrl'),
             bodies=ad_data.get('bodies'),
             headlines=ad_data.get('headlines'),
             description=ad_data.get('description'),
@@ -278,6 +283,78 @@ def upload_image(
             raise HTTPException(status_code=400, detail="image_url is required")
         image_hash = service.upload_image(image_url, ad_account_id)
         return {"image_hash": image_hash}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/upload-video")
+def upload_video(
+    data: Dict[str, Any],
+    ad_account_id: Optional[str] = None,
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(require_permission("campaigns:write"))
+):
+    """Upload a video to Facebook Ad Library.
+
+    Request body:
+        video_url: URL of the video to upload
+        wait_for_ready: Whether to wait for processing (default True)
+        timeout: Max seconds to wait (default 600)
+
+    Returns:
+        video_id: Facebook video ID
+        status: 'processing', 'ready', or 'error'
+        thumbnails: List of auto-generated thumbnail URLs (if ready)
+    """
+    try:
+        video_url = data.get("video_url")
+        if not video_url:
+            raise HTTPException(status_code=400, detail="video_url is required")
+
+        wait_for_ready = data.get("wait_for_ready", True)
+        timeout = data.get("timeout", 600)
+
+        result = service.upload_video(
+            video_url,
+            ad_account_id,
+            wait_for_ready=wait_for_ready,
+            timeout=timeout
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/video-status/{video_id}")
+def get_video_status(
+    video_id: str,
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Check the processing status of a video.
+
+    Returns:
+        status: 'processing', 'ready', or 'error'
+        video_id: The video ID
+        length: Video duration in seconds (if ready)
+    """
+    try:
+        return service.get_video_status(video_id)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/video-thumbnails/{video_id}")
+def get_video_thumbnails(
+    video_id: str,
+    service: FacebookService = Depends(get_facebook_service),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get auto-generated thumbnails for a video.
+
+    Returns:
+        thumbnails: List of thumbnail URLs
+    """
+    try:
+        thumbnails = service.get_video_thumbnails(video_id)
+        return {"thumbnails": thumbnails}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

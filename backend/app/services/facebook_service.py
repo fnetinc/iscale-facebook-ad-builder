@@ -6,9 +6,11 @@ from facebook_business.adobjects.adset import AdSet
 from facebook_business.adobjects.adimage import AdImage
 from facebook_business.adobjects.adcreative import AdCreative
 from facebook_business.adobjects.ad import Ad
+from facebook_business.adobjects.advideo import AdVideo
 from dotenv import load_dotenv
 from pathlib import Path
 from facebook_business.adobjects.user import User
+import time
 
 # Load .env from project root (parent of backend)
 env_path = Path(__file__).resolve().parent.parent.parent.parent / '.env'
@@ -341,30 +343,218 @@ class FacebookService:
             image.remote_create()
             return image[AdImage.Field.hash]
 
+    def upload_video(self, video_path_or_url, ad_account_id=None, wait_for_ready=True, timeout=600):
+        """Upload a video to the ad library.
+
+        Args:
+            video_path_or_url: Local file path or URL to video
+            ad_account_id: Optional ad account ID
+            wait_for_ready: Whether to wait for video processing to complete
+            timeout: Max seconds to wait for processing (default 10 min)
+
+        Returns:
+            dict with video_id, status, and thumbnails (if ready)
+        """
+        import tempfile
+        import requests
+
+        account = self._get_account(ad_account_id)
+
+        # Check if it's a URL or local file path
+        if video_path_or_url.startswith('http://') or video_path_or_url.startswith('https://'):
+            # Download the video to a temp file
+            print(f"Downloading video from URL: {video_path_or_url[:100]}...")
+            response = requests.get(video_path_or_url, timeout=120, stream=True)
+            response.raise_for_status()
+
+            # Get file extension from URL or default to .mp4
+            ext = '.mp4'
+            if '.' in video_path_or_url.split('/')[-1]:
+                url_ext = video_path_or_url.split('.')[-1].split('?')[0].lower()
+                if url_ext in ['mp4', 'mov', 'avi', 'webm']:
+                    ext = '.' + url_ext
+
+            with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                for chunk in response.iter_content(chunk_size=8192):
+                    tmp.write(chunk)
+                local_path = tmp.name
+
+            print(f"Video downloaded to temp file: {local_path}")
+        else:
+            local_path = video_path_or_url
+
+        try:
+            # Create and upload video
+            video = AdVideo(parent_id=account.get_id_assured())
+            video[AdVideo.Field.filepath] = local_path
+            video.remote_create()
+
+            video_id = video['id']
+            print(f"Video uploaded with ID: {video_id}")
+
+            if wait_for_ready:
+                # Wait for video processing to complete
+                status = self.wait_for_video_ready(video_id, timeout=timeout)
+            else:
+                status = self.get_video_status(video_id)
+
+            # Get thumbnails if video is ready
+            thumbnails = []
+            if status.get('status') == 'ready':
+                try:
+                    thumbnails = self.get_video_thumbnails(video_id)
+                except Exception as e:
+                    print(f"Warning: Could not fetch thumbnails: {e}")
+
+            return {
+                'video_id': video_id,
+                'status': status.get('status', 'processing'),
+                'thumbnails': thumbnails
+            }
+
+        finally:
+            # Clean up temp file if we downloaded it
+            if video_path_or_url.startswith('http'):
+                try:
+                    os.remove(local_path)
+                except:
+                    pass
+
+    def get_video_status(self, video_id):
+        """Check the processing status of a video.
+
+        Returns:
+            dict with status ('processing', 'ready', 'error')
+        """
+        import requests
+
+        url = f"https://graph.facebook.com/v21.0/{video_id}"
+        params = {
+            'fields': 'id,status,length,source',
+            'access_token': self.access_token
+        }
+
+        response = requests.get(url, params=params, timeout=30)
+        data = response.json()
+
+        if 'error' in data:
+            return {'status': 'error', 'error': data['error'].get('message', 'Unknown error')}
+
+        # Facebook video status can be: processing, ready, error
+        fb_status = data.get('status', {})
+        if isinstance(fb_status, dict):
+            video_status = fb_status.get('video_status', 'processing').lower()
+        else:
+            video_status = str(fb_status).lower()
+
+        return {
+            'status': video_status,
+            'video_id': video_id,
+            'length': data.get('length'),
+            'source': data.get('source')
+        }
+
+    def wait_for_video_ready(self, video_id, timeout=600, interval=10):
+        """Wait for video processing to complete.
+
+        Args:
+            video_id: Facebook video ID
+            timeout: Max seconds to wait
+            interval: Seconds between status checks
+
+        Returns:
+            dict with final status
+        """
+        start_time = time.time()
+
+        while (time.time() - start_time) < timeout:
+            status = self.get_video_status(video_id)
+            print(f"Video {video_id} status: {status.get('status')}")
+
+            if status.get('status') == 'ready':
+                return status
+            elif status.get('status') == 'error':
+                raise Exception(f"Video processing failed: {status.get('error', 'Unknown error')}")
+
+            time.sleep(interval)
+
+        raise Exception(f"Video processing timeout after {timeout} seconds")
+
+    def get_video_thumbnails(self, video_id):
+        """Get auto-generated thumbnails for a video.
+
+        Returns:
+            list of thumbnail URLs
+        """
+        import requests
+
+        url = f"https://graph.facebook.com/v21.0/{video_id}/thumbnails"
+        params = {
+            'access_token': self.access_token
+        }
+
+        response = requests.get(url, params=params, timeout=30)
+        data = response.json()
+
+        if 'error' in data:
+            print(f"Thumbnail fetch error: {data['error']}")
+            return []
+
+        thumbnails = []
+        for thumb in data.get('data', []):
+            if 'uri' in thumb:
+                thumbnails.append(thumb['uri'])
+
+        return thumbnails
+
     def create_creative(self, creative_data, ad_account_id=None):
-        """Create an ad creative."""
+        """Create an ad creative (supports both image and video)."""
         account = self._get_account(ad_account_id)
 
         page_id = creative_data.get('page_id')
         image_hash = creative_data.get('image_hash')
-        
-        object_story_spec = {
-            'page_id': page_id,
-            'link_data': {
-                'image_hash': image_hash,
-                'link': creative_data.get('website_url'),
-                'message': creative_data.get('primary_text'),
-                'name': creative_data.get('headline'),
-                'description': creative_data.get('description'),
-                'call_to_action': {
-                    'type': creative_data.get('cta', 'LEARN_MORE'),
-                    'value': {
-                        'link': creative_data.get('website_url')
+        video_id = creative_data.get('video_id')
+
+        # Determine if this is a video or image creative
+        if video_id:
+            # Video creative
+            object_story_spec = {
+                'page_id': page_id,
+                'video_data': {
+                    'video_id': video_id,
+                    'message': creative_data.get('primary_text', ''),
+                    'title': creative_data.get('headline', ''),
+                    'call_to_action': {
+                        'type': creative_data.get('cta', 'LEARN_MORE'),
+                        'value': {
+                            'link': creative_data.get('website_url')
+                        }
                     }
                 }
             }
-        }
-        
+
+            # Add custom thumbnail if provided
+            if creative_data.get('thumbnail_url'):
+                object_story_spec['video_data']['image_url'] = creative_data['thumbnail_url']
+        else:
+            # Image creative (existing logic)
+            object_story_spec = {
+                'page_id': page_id,
+                'link_data': {
+                    'image_hash': image_hash,
+                    'link': creative_data.get('website_url'),
+                    'message': creative_data.get('primary_text'),
+                    'name': creative_data.get('headline'),
+                    'description': creative_data.get('description'),
+                    'call_to_action': {
+                        'type': creative_data.get('cta', 'LEARN_MORE'),
+                        'value': {
+                            'link': creative_data.get('website_url')
+                        }
+                    }
+                }
+            }
+
         if creative_data.get('instagram_actor_id'):
             object_story_spec['instagram_actor_id'] = creative_data['instagram_actor_id']
 

@@ -8,8 +8,11 @@ from app.core.config import settings
 router = APIRouter()
 
 # Security: Define allowed file types and size limits
-ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
-MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+ALLOWED_IMAGE_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
+ALLOWED_VIDEO_EXTENSIONS = {'.mp4', '.mov', '.avi', '.webm'}
+ALLOWED_EXTENSIONS = ALLOWED_IMAGE_EXTENSIONS | ALLOWED_VIDEO_EXTENSIONS
+MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB for images
+MAX_VIDEO_SIZE = 500 * 1024 * 1024  # 500MB for videos
 
 # Local upload dir for fallback
 UPLOAD_DIR = Path(__file__).parent.parent.parent.parent / "uploads"
@@ -73,14 +76,18 @@ async def upload_file(file: UploadFile = File(...)):
                 detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
             )
 
+        # Determine if video or image
+        is_video = file_extension in ALLOWED_VIDEO_EXTENSIONS
+        max_size = MAX_VIDEO_SIZE if is_video else MAX_IMAGE_SIZE
+
         # Read file content
         file_content = await file.read()
 
         # Security: Validate file size
-        if len(file_content) > MAX_FILE_SIZE:
+        if len(file_content) > max_size:
             raise HTTPException(
                 status_code=400,
-                detail=f"File too large. Maximum size: {MAX_FILE_SIZE / (1024 * 1024)}MB"
+                detail=f"File too large. Maximum size: {max_size / (1024 * 1024)}MB"
             )
 
         # Generate a unique filename
@@ -92,7 +99,9 @@ async def upload_file(file: UploadFile = File(...)):
         else:
             url = await upload_to_local(file_content, filename)
 
-        return {"url": url}
+        # Return media type along with URL
+        media_type = 'video' if is_video else 'image'
+        return {"url": url, "media_type": media_type}
     except HTTPException:
         raise
     except Exception as e:

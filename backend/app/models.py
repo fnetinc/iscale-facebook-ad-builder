@@ -195,6 +195,11 @@ class FacebookAd(Base):
     name = Column(String, nullable=False)
     creative_name = Column(String, nullable=True)
     image_url = Column(String, nullable=True)
+    # Video support fields
+    media_type = Column(String, default='image')  # 'image' or 'video'
+    video_url = Column(String, nullable=True)
+    video_id = Column(String, nullable=True)  # Facebook video ID
+    thumbnail_url = Column(String, nullable=True)
     bodies = Column(JSON, nullable=True)
     headlines = Column(JSON, nullable=True)
     description = Column(Text, nullable=True)
