@@ -39,6 +39,12 @@ const AdCreativeStep = ({ onNext, onBack }) => {
     const [manualPageEntry, setManualPageEntry] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
 
+    const handleDragEnter = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+    };
+
     const handleDragOver = (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -48,6 +54,8 @@ const AdCreativeStep = ({ onNext, onBack }) => {
     const handleDragLeave = (e) => {
         e.preventDefault();
         e.stopPropagation();
+        // Only set dragging to false if leaving the drop zone entirely
+        if (e.currentTarget.contains(e.relatedTarget)) return;
         setIsDragging(false);
     };
 
@@ -436,6 +444,7 @@ const AdCreativeStep = ({ onNext, onBack }) => {
                     <div
                         className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors mb-4 ${isDragging ? 'border-amber-500 bg-amber-50' : 'border-gray-300 hover:border-amber-500'
                             }`}
+                        onDragEnter={handleDragEnter}
                         onDragOver={handleDragOver}
                         onDragLeave={handleDragLeave}
                         onDrop={handleDrop}
