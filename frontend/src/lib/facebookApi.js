@@ -81,7 +81,8 @@ export async function getCampaigns(adAccountId) {
             lifetimeBudget: campaign.lifetime_budget,
             budgetRemaining: campaign.budget_remaining,
             createdTime: campaign.created_time,
-            updatedTime: campaign.updated_time
+            updatedTime: campaign.updated_time,
+            isCBO: campaign.is_adset_budget_sharing_enabled
         }));
     } catch (error) {
         console.error('Error fetching campaigns:', error);
@@ -272,6 +273,7 @@ export async function createFacebookAdSet(adsetData, campaignId, adAccountId, bu
         const payload = {
             ...adsetData,
             campaign_id: campaignId,
+            budget_type: budgetType, // CBO or ABO - tells backend whether to set budget at adset level
             daily_budget: adsetData.dailyBudget, // Map camelCase to snake_case if needed, or handle in backend
             optimization_goal: adsetData.optimizationGoal,
             bid_strategy: adsetData.bidStrategy,

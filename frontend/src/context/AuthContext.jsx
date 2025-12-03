@@ -31,8 +31,11 @@ export const AuthProvider = ({ children }) => {
                         try {
                             await refreshAccessToken();
                         } catch (refreshErr) {
-                            // Refresh failed, clear tokens
-                            logout();
+                            // Only logout if it's a definitive auth failure (401/403)
+                            // If it's a network error or 500, keep the tokens so we can try again later
+                            if (refreshErr.status === 401 || refreshErr.status === 403) {
+                                logout();
+                            }
                         }
                     } else {
                         logout();
@@ -43,6 +46,22 @@ export const AuthProvider = ({ children }) => {
         };
         initAuth();
     }, []);
+
+    // Auto-refresh token every 6 days to prevent expiration (tokens last 7 days)
+    useEffect(() => {
+        if (!refreshToken) return;
+
+        const refreshInterval = setInterval(async () => {
+            try {
+                await refreshAccessToken();
+            } catch (err) {
+                // Silently fail - will retry on next interval or next API call
+                console.log('Background token refresh failed, will retry');
+            }
+        }, 6 * 24 * 60 * 60 * 1000); // 6 days in ms
+
+        return () => clearInterval(refreshInterval);
+    }, [refreshToken]);
 
     const fetchUser = async () => {
         const response = await fetch(`${API_URL}/auth/me`, {
@@ -158,21 +177,35 @@ export const AuthProvider = ({ children }) => {
             throw new Error('No refresh token');
         }
 
-        const response = await fetch(`${API_URL}/auth/refresh`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ refresh_token: refreshToken }),
-        });
+        let response;
+        try {
+            response = await fetch(`${API_URL}/auth/refresh`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ refresh_token: refreshToken }),
+            });
+        } catch (err) {
+            // Network error - rethrow but don't attach status so we don't logout
+            throw err;
+        }
 
         if (!response.ok) {
-            throw new Error('Failed to refresh token');
+            const error = new Error('Failed to refresh token');
+            error.status = response.status;
+            throw error;
         }
 
         const data = await response.json();
         setAccessToken(data.access_token);
         localStorage.setItem('accessToken', data.access_token);
+
+        // Update refresh token if new one provided (rolling refresh)
+        if (data.refresh_token) {
+            setRefreshToken(data.refresh_token);
+            localStorage.setItem('refreshToken', data.refresh_token);
+        }
 
         // Re-fetch user data with new token
         await fetchUser();
@@ -208,8 +241,13 @@ export const AuthProvider = ({ children }) => {
                 const newToken = await refreshAccessToken();
                 response = await makeRequest(newToken);
             } catch (err) {
-                logout();
-                throw new Error('Session expired. Please login again.');
+                // Only logout if it's a definitive auth failure
+                if (err.status === 401 || err.status === 403) {
+                    logout();
+                    throw new Error('Session expired. Please login again.');
+                }
+                // For network errors, we throw but don't logout
+                throw err;
             }
         }
 

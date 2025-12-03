@@ -52,10 +52,18 @@ const CampaignStep = ({ onNext, onBack }) => {
 
     const handleSelectExisting = (campaign) => {
         setSelectedCampaign(campaign);
+
+        const dailyBudget = campaign.dailyBudget ? parseInt(campaign.dailyBudget) / 100 : 0;
+        const lifetimeBudget = campaign.lifetimeBudget ? parseInt(campaign.lifetimeBudget) / 100 : 0;
+
+        // CBO campaigns have budget set at campaign level
+        // ABO campaigns have budget set at ad set level (campaign budget is 0 or null)
+        const isCBO = dailyBudget > 0 || lifetimeBudget > 0;
+
         setCampaignData({
             ...campaign,
-            budgetType: campaign.dailyBudget ? 'CBO' : 'ABO',
-            dailyBudget: campaign.dailyBudget ? parseInt(campaign.dailyBudget) / 100 : 0,
+            budgetType: isCBO ? 'CBO' : 'ABO',
+            dailyBudget: dailyBudget,
             bidStrategy: campaign.bid_strategy || '',
             fbCampaignId: campaign.id,
             isExisting: true
