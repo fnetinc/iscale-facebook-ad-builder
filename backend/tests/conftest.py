@@ -80,19 +80,38 @@ def test_user(db_session):
             db_session.add(perm)
         return perm
 
-    campaigns_write = get_or_create_permission("campaigns:write", "Write campaigns")
-    ads_write = get_or_create_permission("ads:write", "Write ads")
-    ads_delete = get_or_create_permission("ads:delete", "Delete ads")
+    # Create all permissions needed for tests
+    all_permissions = [
+        ("campaigns:write", "Write campaigns"),
+        ("ads:write", "Write ads"),
+        ("ads:delete", "Delete ads"),
+        ("brands:write", "Write brands"),
+        ("brands:delete", "Delete brands"),
+        ("products:write", "Write products"),
+        ("products:delete", "Delete products"),
+        ("profiles:write", "Write profiles"),
+        ("profiles:delete", "Delete profiles"),
+    ]
+
+    permissions = []
+    for name, desc in all_permissions:
+        perm = get_or_create_permission(name, desc)
+        permissions.append(perm)
     db_session.commit()
 
-    # Get or create admin role
+    # Get or create admin role with all permissions
     admin_role = db_session.query(Role).filter(Role.name == "admin").first()
     if not admin_role:
         admin_role = Role(name="admin", description="Administrator")
-        admin_role.permissions.append(campaigns_write)
-        admin_role.permissions.append(ads_write)
-        admin_role.permissions.append(ads_delete)
+        for perm in permissions:
+            admin_role.permissions.append(perm)
         db_session.add(admin_role)
+        db_session.commit()
+    else:
+        # Ensure admin role has all permissions
+        for perm in permissions:
+            if perm not in admin_role.permissions:
+                admin_role.permissions.append(perm)
         db_session.commit()
 
     # Clean up any existing test user
