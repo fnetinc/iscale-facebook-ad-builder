@@ -3,6 +3,22 @@ import pytest
 from fastapi import status
 
 
+# Standard brand payload matching BrandCreate schema
+def make_brand_payload(name, **kwargs):
+    """Create a brand payload with required colors."""
+    return {
+        "name": name,
+        "colors": {
+            "primary": kwargs.get("primary", "#FF0000"),
+            "secondary": kwargs.get("secondary", "#00FF00"),
+            "highlight": kwargs.get("highlight", "#0000FF")
+        },
+        "voice": kwargs.get("voice", "Professional"),
+        "products": kwargs.get("products", []),
+        "profileIds": kwargs.get("profileIds", [])
+    }
+
+
 class TestBrandCRUD:
     """Tests for brand CRUD operations."""
 
@@ -10,39 +26,29 @@ class TestBrandCRUD:
         """Test creating a new brand."""
         response = client.post(
             "/api/v1/brands/",
-            json={
-                "name": "Test Brand",
-                "primary_color": "#FF0000",
-                "secondary_color": "#00FF00",
-                "highlight_color": "#0000FF",
-                "voice": "Professional and friendly"
-            },
+            json=make_brand_payload(
+                "Test Brand",
+                voice="Professional and friendly"
+            ),
             headers=auth_headers
         )
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["name"] == "Test Brand"
-        assert data["primary_color"] == "#FF0000"
+        assert data["colors"]["primary"] == "#FF0000"
         assert "id" in data
 
     def test_create_brand_with_products(self, client, auth_headers):
         """Test creating a brand with products."""
         response = client.post(
             "/api/v1/brands/",
-            json={
-                "name": "Brand With Products",
-                "primary_color": "#FF0000",
-                "products": [
-                    {
-                        "name": "Product 1",
-                        "description": "First product"
-                    },
-                    {
-                        "name": "Product 2",
-                        "description": "Second product"
-                    }
+            json=make_brand_payload(
+                "Brand With Products",
+                products=[
+                    {"name": "Product 1", "description": "First product"},
+                    {"name": "Product 2", "description": "Second product"}
                 ]
-            },
+            ),
             headers=auth_headers
         )
         assert response.status_code == status.HTTP_200_OK
@@ -53,7 +59,7 @@ class TestBrandCRUD:
         """Test creating brand without auth returns 401."""
         response = client.post(
             "/api/v1/brands/",
-            json={"name": "Unauthorized Brand"}
+            json=make_brand_payload("Unauthorized Brand")
         )
         assert response.status_code == status.HTTP_401_UNAUTHORIZED
 
@@ -62,7 +68,7 @@ class TestBrandCRUD:
         # Create a brand first
         client.post(
             "/api/v1/brands/",
-            json={"name": "List Test Brand"},
+            json=make_brand_payload("List Test Brand"),
             headers=auth_headers
         )
 
@@ -77,7 +83,7 @@ class TestBrandCRUD:
         # Create a brand
         create_response = client.post(
             "/api/v1/brands/",
-            json={"name": "Original Name", "primary_color": "#000000"},
+            json=make_brand_payload("Original Name"),
             headers=auth_headers
         )
         brand_id = create_response.json()["id"]
@@ -85,20 +91,20 @@ class TestBrandCRUD:
         # Update the brand
         response = client.put(
             f"/api/v1/brands/{brand_id}",
-            json={"name": "Updated Name", "primary_color": "#FFFFFF"},
+            json=make_brand_payload("Updated Name", primary="#FFFFFF"),
             headers=auth_headers
         )
         assert response.status_code == status.HTTP_200_OK
         data = response.json()
         assert data["name"] == "Updated Name"
-        assert data["primary_color"] == "#FFFFFF"
+        assert data["colors"]["primary"] == "#FFFFFF"
 
     def test_delete_brand(self, client, auth_headers):
         """Test deleting a brand."""
         # Create a brand
         create_response = client.post(
             "/api/v1/brands/",
-            json={"name": "To Delete"},
+            json=make_brand_payload("To Delete"),
             headers=auth_headers
         )
         brand_id = create_response.json()["id"]
@@ -120,10 +126,10 @@ class TestBrandCRUD:
         # Create brand with products
         create_response = client.post(
             "/api/v1/brands/",
-            json={
-                "name": "Brand To Cascade",
-                "products": [{"name": "Cascade Product", "description": "Will be deleted"}]
-            },
+            json=make_brand_payload(
+                "Brand To Cascade",
+                products=[{"name": "Cascade Product", "description": "Will be deleted"}]
+            ),
             headers=auth_headers
         )
         brand_id = create_response.json()["id"]
@@ -136,11 +142,11 @@ class TestBrandCRUD:
         products = db_session.query(Product).filter(Product.brand_id == brand_id).all()
         assert len(products) == 0
 
-    def test_brand_validation_missing_name(self, client, auth_headers):
-        """Test brand creation fails without name."""
+    def test_brand_validation_missing_colors(self, client, auth_headers):
+        """Test brand creation fails without colors."""
         response = client.post(
             "/api/v1/brands/",
-            json={"primary_color": "#FF0000"},
+            json={"name": "Missing Colors"},
             headers=auth_headers
         )
         assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
