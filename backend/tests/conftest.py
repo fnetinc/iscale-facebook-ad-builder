@@ -6,9 +6,8 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from unittest.mock import MagicMock, patch
 
-# For tests, we use the configured PostgreSQL database
-# Tests are designed to work with any PostgreSQL database
-# The production DB is used - ensure test data is properly cleaned up
+# For tests, use a SEPARATE dev database to avoid polluting production
+# Set TEST_DATABASE_URL env var or fallback to dev database
 
 from app.main import app
 from app.database import Base, get_db
@@ -16,9 +15,16 @@ from app.models import User, Role
 from app.core.security import get_password_hash
 from app.core.config import settings
 
-# Use the same PostgreSQL database as the app for test parity
-# But create isolated test sessions
-engine = create_engine(settings.DATABASE_URL)
+# Use DATABASE_URL from env (CI sets this to localhost postgres)
+# Fallback to dev database for local development
+TEST_DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    os.getenv(
+        "TEST_DATABASE_URL",
+        "postgresql://postgres:***REDACTED***@***REDACTED***/railway"
+    )
+)
+engine = create_engine(TEST_DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
