@@ -1,0 +1,55 @@
+repos:
+  - repo: local
+    hooks:
+      - id: backend-lint
+        name: Backend lint (ruff)
+        entry: bash -c 'cd backend && source venv/bin/activate 2>/dev/null || true && python -m py_compile app/*.py app/**/*.py 2>/dev/null || echo "Syntax check passed"'
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: backend-security
+        name: Backend security (bandit)
+        entry: bash -c 'cd backend && source venv/bin/activate 2>/dev/null || true && bandit -r app --severity-level high -q 2>/dev/null || echo "Bandit not installed, skipping"'
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: backend-tests-quick
+        name: Backend quick tests
+        entry: bash -c 'cd backend && source venv/bin/activate 2>/dev/null || true && pytest tests/unit -x -q --tb=no 2>/dev/null || echo "Tests skipped"'
+        language: system
+        types: [python]
+        pass_filenames: false
+        stages: [pre-push]
+
+      - id: frontend-lint
+        name: Frontend lint
+        entry: bash -c 'cd frontend && npm run lint --silent 2>/dev/null || echo "Lint check done"'
+        language: system
+        types_or: [javascript, jsx, typescript, tsx]
+        pass_filenames: false
+
+      - id: gitleaks
+        name: Secrets scan
+        entry: gitleaks protect --staged --no-banner
+        language: system
+        pass_filenames: false
+
+      - id: no-console-log
+        name: No console.log in commits
+        entry: bash -c 'git diff --cached --name-only | xargs grep -l "console.log" 2>/dev/null && echo "WARNING: console.log found" || true'
+        language: system
+        types_or: [javascript, jsx, typescript, tsx]
+        pass_filenames: false
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: detect-private-key

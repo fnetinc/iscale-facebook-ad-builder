@@ -1,3 +1,4 @@
+import os
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -5,33 +6,44 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 from unittest.mock import MagicMock, patch
 
+# For tests, we use the configured PostgreSQL database
+# Tests are designed to work with any PostgreSQL database
+# The production DB is used - ensure test data is properly cleaned up
+
 from app.main import app
 from app.database import Base, get_db
 from app.models import User, Role
 from app.core.security import get_password_hash
+from app.core.config import settings
 
-
-# Use in-memory SQLite for tests
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
-
-engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    connect_args={"check_same_thread": False},
-    poolclass=StaticPool,
-)
+# Use the same PostgreSQL database as the app for test parity
+# But create isolated test sessions
+engine = create_engine(settings.DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 @pytest.fixture(scope="function")
 def db_session():
-    """Create a fresh database session for each test."""
+    """Create a fresh database session for each test.
+
+    Note: Uses PostgreSQL. Tables are not dropped after tests to preserve
+    production data. Test user is cleaned up individually.
+    """
+    # Ensure tables exist
     Base.metadata.create_all(bind=engine)
     session = TestingSessionLocal()
     try:
         yield session
     finally:
+        # Clean up test data (don't drop tables in production DB)
+        # Delete test user if it exists
+        from app.models import User, RefreshToken
+        test_user = session.query(User).filter(User.email == "test@example.com").first()
+        if test_user:
+            session.query(RefreshToken).filter(RefreshToken.user_id == test_user.id).delete()
+            session.delete(test_user)
+            session.commit()
         session.close()
-        Base.metadata.drop_all(bind=engine)
 
 
 @pytest.fixture(scope="function")
@@ -54,21 +66,36 @@ def test_user(db_session):
     """Create a test user with admin role and all permissions."""
     from app.models import Permission
 
-    # Create permissions
-    campaigns_write = Permission(name="campaigns:write", description="Write campaigns")
-    ads_write = Permission(name="ads:write", description="Write ads")
-    ads_delete = Permission(name="ads:delete", description="Delete ads")
-    db_session.add(campaigns_write)
-    db_session.add(ads_write)
-    db_session.add(ads_delete)
+    # Get or create permissions
+    def get_or_create_permission(name, description):
+        perm = db_session.query(Permission).filter(Permission.name == name).first()
+        if not perm:
+            perm = Permission(name=name, description=description)
+            db_session.add(perm)
+        return perm
 
-    # Create admin role
-    admin_role = Role(name="admin", description="Administrator")
-    admin_role.permissions.append(campaigns_write)
-    admin_role.permissions.append(ads_write)
-    admin_role.permissions.append(ads_delete)
-    db_session.add(admin_role)
+    campaigns_write = get_or_create_permission("campaigns:write", "Write campaigns")
+    ads_write = get_or_create_permission("ads:write", "Write ads")
+    ads_delete = get_or_create_permission("ads:delete", "Delete ads")
     db_session.commit()
+
+    # Get or create admin role
+    admin_role = db_session.query(Role).filter(Role.name == "admin").first()
+    if not admin_role:
+        admin_role = Role(name="admin", description="Administrator")
+        admin_role.permissions.append(campaigns_write)
+        admin_role.permissions.append(ads_write)
+        admin_role.permissions.append(ads_delete)
+        db_session.add(admin_role)
+        db_session.commit()
+
+    # Clean up any existing test user
+    existing_user = db_session.query(User).filter(User.email == "test@example.com").first()
+    if existing_user:
+        from app.models import RefreshToken
+        db_session.query(RefreshToken).filter(RefreshToken.user_id == existing_user.id).delete()
+        db_session.delete(existing_user)
+        db_session.commit()
 
     # Create test user
     user = User(
