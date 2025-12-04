@@ -160,11 +160,17 @@ class TestVideoEndpoints:
 
     def test_save_video_ad_locally(self, client, auth_headers, db_session):
         """Test saving a video ad to local database."""
+        import uuid
         from app.models import FacebookAdSet, FacebookCampaign
+
+        # Generate unique IDs
+        campaign_id = f"camp_{uuid.uuid4().hex[:8]}"
+        adset_id = f"adset_{uuid.uuid4().hex[:8]}"
+        ad_id = f"ad_video_{uuid.uuid4().hex[:8]}"
 
         # Create prerequisite campaign and adset
         campaign = FacebookCampaign(
-            id="camp_123",
+            id=campaign_id,
             name="Test Campaign",
             objective="CONVERSIONS",
             budget_type="ABO"
@@ -173,42 +179,49 @@ class TestVideoEndpoints:
         db_session.commit()
 
         adset = FacebookAdSet(
-            id="adset_123",
-            campaign_id="camp_123",
+            id=adset_id,
+            campaign_id=campaign_id,
             name="Test AdSet",
             optimization_goal="CONVERSIONS"
         )
         db_session.add(adset)
         db_session.commit()
 
-        response = client.post(
-            "/api/v1/facebook/ads/save",
-            json={
-                "id": "ad_video_123",
-                "adsetId": "adset_123",
-                "name": "Test Video Ad",
-                "mediaType": "video",
-                "videoUrl": "https://example.com/video.mp4",
-                "videoId": "fb_video_123",
-                "thumbnailUrl": "https://example.com/thumb.jpg",
-                "headlines": ["Great Video!"],
-                "bodies": ["Check out this amazing video"],
-                "cta": "WATCH_MORE",
-                "websiteUrl": "https://example.com"
-            },
-            headers=auth_headers
-        )
+        try:
+            response = client.post(
+                "/api/v1/facebook/ads/save",
+                json={
+                    "id": ad_id,
+                    "adsetId": adset_id,
+                    "name": "Test Video Ad",
+                    "mediaType": "video",
+                    "videoUrl": "https://example.com/video.mp4",
+                    "videoId": "fb_video_123",
+                    "thumbnailUrl": "https://example.com/thumb.jpg",
+                    "headlines": ["Great Video!"],
+                    "bodies": ["Check out this amazing video"],
+                    "cta": "WATCH_MORE",
+                    "websiteUrl": "https://example.com"
+                },
+                headers=auth_headers
+            )
 
-        assert response.status_code == 200
+            assert response.status_code == 200
 
-        # Verify ad was saved with video fields
-        from app.models import FacebookAd
-        ad = db_session.query(FacebookAd).filter_by(id="ad_video_123").first()
-        assert ad is not None
-        assert ad.media_type == "video"
-        assert ad.video_url == "https://example.com/video.mp4"
-        assert ad.video_id == "fb_video_123"
-        assert ad.thumbnail_url == "https://example.com/thumb.jpg"
+            # Verify ad was saved with video fields
+            from app.models import FacebookAd
+            ad = db_session.query(FacebookAd).filter_by(id=ad_id).first()
+            assert ad is not None
+            assert ad.media_type == "video"
+            assert ad.video_url == "https://example.com/video.mp4"
+            assert ad.video_id == "fb_video_123"
+            assert ad.thumbnail_url == "https://example.com/thumb.jpg"
+        finally:
+            # Cleanup
+            db_session.query(FacebookAd).filter_by(id=ad_id).delete()
+            db_session.query(FacebookAdSet).filter_by(id=adset_id).delete()
+            db_session.query(FacebookCampaign).filter_by(id=campaign_id).delete()
+            db_session.commit()
 
     def test_create_creative_with_video(self, client, auth_headers, mock_facebook_service):
         """Test creating creative with video_id."""

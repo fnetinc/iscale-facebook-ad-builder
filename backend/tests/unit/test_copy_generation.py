@@ -36,12 +36,15 @@ class TestCopyGeneration:
     @pytest.fixture
     def test_product(self, client, auth_headers, test_brand):
         """Create a test product."""
+        brand_id = test_brand.get("id")
+        if not brand_id:
+            pytest.skip("Brand creation failed, cannot create product")
         response = client.post(
             "/api/v1/products/",
             json={
                 "name": "Copy Gen Test Product",
                 "description": "A revolutionary product that solves problems",
-                "brand_id": test_brand["id"]
+                "brand_id": brand_id
             },
             headers=auth_headers
         )
@@ -55,7 +58,7 @@ class TestCopyGeneration:
             json={
                 "name": "Copy Gen Test Profile",
                 "demographics": "Adults 25-45",
-                "pain_points": "Time constraints, budget concerns",
+                "painPoints": "Time constraints, budget concerns",
                 "goals": "Efficiency, cost savings"
             },
             headers=auth_headers

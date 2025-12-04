@@ -10,6 +10,7 @@ class ProductBase(BaseModel):
 
 class ProductCreate(ProductBase):
     id: Optional[str] = None
+    brand_id: str
 
 class ProductUpdate(ProductBase):
     pass
