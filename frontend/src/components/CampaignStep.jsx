@@ -14,9 +14,9 @@ const CAMPAIGN_OBJECTIVES = [
 ];
 
 const BID_STRATEGIES = [
-    { value: 'LOWEST_COST_WITHOUT_CAP', label: 'Lowest Cost (No Cap)' },
+    { value: 'LOWEST_COST_WITHOUT_CAP', label: 'Lowest Cost (Highest Volume or Value, No Cap)' },
     { value: 'LOWEST_COST_WITH_BID_CAP', label: 'Lowest Cost with Bid Cap' },
-    { value: 'COST_CAP', label: 'Cost Cap' }
+    { value: 'COST_CAP', label: 'Cost Cap (Cost Per Result Goal)' }
 ];
 
 const CampaignStep = ({ onNext, onBack }) => {
@@ -98,6 +98,14 @@ const CampaignStep = ({ onNext, onBack }) => {
 
             if (campaignData.budgetType === 'CBO' && (!campaignData.dailyBudget || campaignData.dailyBudget <= 0)) {
                 showWarning('Please enter a valid Daily Budget for CBO campaign');
+                return;
+            }
+
+            // Validate Bid Amount if strategy requires it (for CBO campaigns)
+            if (campaignData.budgetType === 'CBO' &&
+                (campaignData.bidStrategy === 'LOWEST_COST_WITH_BID_CAP' || campaignData.bidStrategy === 'COST_CAP') &&
+                (!campaignData.bidAmount || campaignData.bidAmount <= 0)) {
+                showWarning('Please enter a valid Bid Amount for the selected bid strategy');
                 return;
             }
 
@@ -298,6 +306,34 @@ const CampaignStep = ({ onNext, onBack }) => {
                                     ))}
                                 </select>
                             </div>
+
+                            {/* Bid Amount - Required for Cost Cap and Bid Cap strategies */}
+                            {(campaignData.bidStrategy === 'COST_CAP' || campaignData.bidStrategy === 'LOWEST_COST_WITH_BID_CAP') && (
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        {campaignData.bidStrategy === 'COST_CAP' ? 'Cost Cap Amount (USD)' : 'Bid Cap Amount (USD)'} *
+                                    </label>
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                            <span className="text-gray-500">$</span>
+                                        </div>
+                                        <input
+                                            type="number"
+                                            value={campaignData.bidAmount || ''}
+                                            onChange={(e) => handleInputChange('bidAmount', parseFloat(e.target.value) || 0)}
+                                            placeholder="10.00"
+                                            min="0.01"
+                                            step="0.01"
+                                            className="w-full pl-7 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        {campaignData.bidStrategy === 'COST_CAP'
+                                            ? 'Maximum average cost per result you want to maintain'
+                                            : 'Maximum bid amount for each auction'}
+                                    </p>
+                                </div>
+                            )}
                         </>
                     )}
                 </div>

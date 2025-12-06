@@ -21,7 +21,7 @@ Railway will host:
 2. Click **"New Project"**
 3. Select **"Deploy from GitHub repo"**
 4. Authorize Railway to access your GitHub account
-5. Select your `video-ad-builder` repository
+5. Select your `breadWinner.com` repository
 
 ## Step 2: Add PostgreSQL Database
 

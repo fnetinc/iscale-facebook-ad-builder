@@ -114,7 +114,18 @@ const BulkAdCreation = ({ onNext, onBack }) => {
             let fbAdsetId = adsetData.fbAdsetId;
             if (!adsetData.isExisting) {
                 setProgress(prev => ({ ...prev, status: 'Creating ad set on Facebook...' }));
-                fbAdsetId = await createFacebookAdSet(adsetData, fbCampaignId, selectedAdAccount.accountId, campaignData.budgetType);
+
+                // For CBO campaigns, pass the bid strategy and bid amount from campaign level
+                const adsetPayload = {
+                    ...adsetData,
+                    // Override bid strategy and amount with campaign-level values for CBO
+                    ...(campaignData.budgetType === 'CBO' && {
+                        bidStrategy: campaignData.bidStrategy,
+                        bidAmount: campaignData.bidAmount
+                    })
+                };
+
+                fbAdsetId = await createFacebookAdSet(adsetPayload, fbCampaignId, selectedAdAccount.accountId, campaignData.budgetType);
             }
 
             // Save Ad Set Locally (Ensure it exists in DB for FK constraints)

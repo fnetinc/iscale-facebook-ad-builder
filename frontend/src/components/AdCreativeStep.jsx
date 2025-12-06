@@ -7,30 +7,17 @@ import { getPages } from '../lib/facebookApi';
 const ALLOWED_IMAGE_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp'];
 const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm'];
 
+// Facebook CTA types - confirmed working
 const CTA_OPTIONS = [
-    'APPLY_NOW',
-    'BOOK_NOW',
-    'CALL_NOW',
-    'CONTACT_US',
-    'DONATE_NOW',
-    'DOWNLOAD',
-    'GET_DIRECTIONS',
-    'GET_OFFER',
-    'GET_QUOTE',
-    'GET_SHOWTIMES',
     'LEARN_MORE',
-    'LISTEN_NOW',
-    'ORDER_NOW',
-    'PLAY_GAME',
-    'REQUEST_TIME',
-    'SEE_MENU',
-    'SEND_MESSAGE',
     'SHOP_NOW',
     'SIGN_UP',
-    'SUBSCRIBE',
-    'USE_APP',
-    'WATCH_MORE',
-    'WHATSAPP_MESSAGE'
+    'CONTACT_US',
+    'DOWNLOAD',
+    'BOOK_NOW',
+    'BUY_TICKETS',
+    'GET_QUOTE',
+    'DONATE_NOW',
 ];
 
 const AdCreativeStep = ({ onNext, onBack }) => {

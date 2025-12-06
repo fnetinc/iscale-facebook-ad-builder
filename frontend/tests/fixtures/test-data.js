@@ -49,7 +49,8 @@ export async function mockApiResponse(page, urlPattern, response, status = 200) 
  * Mock login response (for testing without backend)
  */
 export async function mockLoginSuccess(page) {
-  await page.route('**/api/v1/auth/login/**', route => {
+  // Mock login endpoint - actual endpoint is /auth/login/json
+  await page.route('**/api/v1/auth/login/json', route => {
     route.fulfill({
       status: 200,
       contentType: 'application/json',
@@ -61,6 +62,24 @@ export async function mockLoginSuccess(page) {
     });
   });
 
+  // Also mock /auth/login for backwards compatibility
+  await page.route('**/api/v1/auth/login', route => {
+    if (route.request().url().includes('/json')) {
+      route.continue();
+    } else {
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          access_token: 'mock-access-token',
+          refresh_token: 'mock-refresh-token',
+          token_type: 'bearer'
+        })
+      });
+    }
+  });
+
+  // Mock /me endpoint for auth check
   await page.route('**/api/v1/auth/me', route => {
     route.fulfill({
       status: 200,
@@ -72,6 +91,12 @@ export async function mockLoginSuccess(page) {
         is_active: true
       })
     });
+  });
+
+  // Set tokens in localStorage before navigation
+  await page.addInitScript(() => {
+    localStorage.setItem('accessToken', 'mock-access-token');
+    localStorage.setItem('refreshToken', 'mock-refresh-token');
   });
 }
 

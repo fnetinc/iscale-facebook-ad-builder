@@ -2,12 +2,15 @@ import axios from 'axios';
 
 const API_URL = '/api/v1/research';
 
-export const searchAds = async (query, platform = 'facebook', limit = 10) => {
+export const searchAds = async (query, platform = 'facebook', limit = 10, country = 'US', offset = 0, excludeIds = []) => {
     try {
         const response = await axios.post(`${API_URL}/search`, {
             query,
             platform,
             limit,
+            country,
+            offset,
+            exclude_ids: excludeIds,
         });
         return response.data;
     } catch (error) {

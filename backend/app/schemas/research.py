@@ -6,6 +6,9 @@ class AdSearchRequest(BaseModel):
     query: str
     platform: str = "facebook"
     limit: int = 10
+    country: str = "US"
+    offset: int = 0  # Pagination: controls scroll depth
+    exclude_ids: List[str] = []  # IDs to skip (already fetched)
 
 class ScrapedAdBase(BaseModel):
     brand_name: Optional[str] = None
@@ -15,9 +18,13 @@ class ScrapedAdBase(BaseModel):
     cta_text: Optional[str] = None
     platform: str = "facebook"
     external_id: Optional[str] = None
-    analysis: Optional[Dict[str, Any]] = None
+    analysis: Optional[Dict[str, Any]] = None  # Stores impressions, spend, platforms, etc.
 
 class ScrapedAdCreate(ScrapedAdBase):
+    pass
+
+# For search results (not saved to DB yet)
+class ScrapedAdSearchResult(ScrapedAdBase):
     pass
 
 class ScrapedAdResponse(ScrapedAdBase):
