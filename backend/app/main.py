@@ -21,6 +21,7 @@ app.add_middleware(
         "http://localhost:5173",
         "http://localhost:3000",
         "https://ad-builder-frontend-production.up.railway.app",
+        "https://breadwinner-frontend-development.up.railway.app",
         "https://breadwinner.a4d.com",
     ],
     allow_credentials=True,
