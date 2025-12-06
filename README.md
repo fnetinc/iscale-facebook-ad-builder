@@ -134,3 +134,4 @@ This application can also be deployed to:
 - **AWS/GCP/Azure**: Traditional cloud providers (requires more setup)
 
 For these platforms, you can use the provided `Dockerfile` and adapt the configuration as needed.
+
