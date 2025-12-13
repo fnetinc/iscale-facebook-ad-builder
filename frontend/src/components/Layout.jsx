@@ -9,7 +9,7 @@ export default function Layout() {
     const navigate = useNavigate();
     const { user, logout, hasRole } = useAuth();
     const { showSuccess } = useToast();
-    const [expandedMenus, setExpandedMenus] = useState({ Brands: false });
+    const [expandedMenus, setExpandedMenus] = useState({ Brands: false, Research: false });
     const [isCollapsed, setIsCollapsed] = useState(false);
     const [showUserMenu, setShowUserMenu] = useState(false);
 
@@ -21,7 +21,15 @@ export default function Layout() {
 
     const menuItems = [
         { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
-        { icon: Search, label: 'Research', path: '/research' },
+        {
+            icon: Search,
+            label: 'Research',
+            subItems: [
+                { label: 'Research', path: '/research' },
+                { label: 'Scrape Brand Ads', path: '/research/brand-scrapes' },
+                { label: 'Settings', path: '/research/settings' }
+            ]
+        },
         { icon: Wand2, label: 'Build Creatives', path: '/build-creatives' },
         {
             icon: ShoppingBag,
@@ -82,7 +90,13 @@ export default function Layout() {
                             return (
                                 <div key={item.label} className="space-y-1">
                                     <button
-                                        onClick={() => !isCollapsed && toggleMenu(item.label)}
+                                        onClick={() => {
+                                            if (!isCollapsed) toggleMenu(item.label);
+                                            // Navigate to first subitem
+                                            if (item.subItems?.[0]?.path) {
+                                                navigate(item.subItems[0].path);
+                                            }
+                                        }}
                                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${isActive
                                             ? 'bg-amber-50 text-amber-900 font-medium'
                                             : 'text-gray-600 hover:bg-amber-50 hover:text-amber-800'

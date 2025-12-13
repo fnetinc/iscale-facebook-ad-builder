@@ -19,6 +19,8 @@ import FacebookCampaigns from './pages/FacebookCampaigns';
 import WinningAds from './pages/WinningAds';
 import GeneratedAds from './pages/GeneratedAds';
 import Research from './pages/Research';
+import ResearchSettings from './pages/ResearchSettings';
+import BrandScrapes from './pages/BrandScrapes';
 import AdRemix from './pages/AdRemix';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
@@ -46,6 +48,8 @@ function App() {
                 >
                   <Route index element={<Dashboard />} />
                   <Route path="research" element={<Research />} />
+                  <Route path="research/brand-scrapes" element={<BrandScrapes />} />
+                  <Route path="research/settings" element={<ResearchSettings />} />
                   <Route path="build-creatives" element={<CreateAds />} />
                   <Route path="image-ads" element={<ImageAds />} />
                   <Route path="video-ads" element={<VideoAds />} />
