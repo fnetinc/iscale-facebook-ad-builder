@@ -15,22 +15,20 @@ import os
 from typing import List, Optional
 from app.schemas.research import ScrapedAdCreate
 from datetime import datetime
+from sqlalchemy.orm import Session
 
 
 class FacebookAdsLibraryAPI:
     """Official Facebook Ads Library API client."""
 
-    def __init__(self):
+    def __init__(self, db: Session = None):
         self.base_url = "https://graph.facebook.com/v21.0/ads_archive"
         self.access_token = os.getenv("FACEBOOK_ADS_LIBRARY_TOKEN") or os.getenv("VITE_FACEBOOK_ACCESS_TOKEN")
+        self.db = db
 
-    async def search_ads(self, query: str, limit: int = 10, country: str = "US", offset: int = 0, exclude_ids: List[str] = None) -> List[ScrapedAdCreate]:
+    async def search_ads(self, query: str, limit: int = 10, country: str = "US", offset: int = 0, exclude_ids: List[str] = None, negative_keywords: List[str] = None):
         """
-        Search Facebook Ads Library using Playwright scraper.
-
-        The official API doesn't return media URLs (only iframe preview URLs),
-        so we always use the Playwright scraper which intercepts network requests
-        to capture actual CDN media URLs.
+        Search Facebook Ads Library using API or fallback to scraper.
 
         Args:
             query: Search term (brand name, keyword, etc.)
@@ -38,14 +36,191 @@ class FacebookAdsLibraryAPI:
             country: Country code for ad_reached_countries
             offset: Number of "pages" to skip (controls scroll depth)
             exclude_ids: List of ad IDs to exclude (already fetched)
+            negative_keywords: List of keywords to filter out from results
 
         Returns:
-            List of ScrapedAdCreate objects
+            Tuple of (ads, metrics) where metrics is a dict with:
+            - total_ads_found: Total ads returned from API
+            - filtered_by_page_blacklist: Count filtered by page blacklist
+            - filtered_by_keyword_blacklist: Count filtered by keywords
+            - api_calls_made: Number of API calls
         """
-        # Always use Playwright scraper to get actual media URLs
-        # The official API only returns ad_snapshot_url (iframe) which can't be embedded
-        print(f"Searching Facebook Ads Library for '{query}' in {country} (offset={offset})")
-        return await self._fallback_search(query, limit, country, offset, exclude_ids or [])
+        print(f"Searching Facebook Ads Library for '{query}' in {country} (offset={offset}, negative_keywords={negative_keywords})")
+
+        # Try API first if token available
+        if self.access_token:
+            try:
+                ads = await self._api_search(query, limit, country, offset, exclude_ids or [], negative_keywords or [])
+
+                # Fall back to Chromium if:
+                # 1. API returns 0 ads (completely blocked keyword)
+                # 2. API returns significantly fewer than requested (< 50% when limit >= 100)
+                #    This catches keywords like "semaglutide" that are severely limited
+                should_fallback = False
+                if len(ads) == 0:
+                    print(f"API returned 0 ads for '{query}', falling back to Chromium scraper")
+                    should_fallback = True
+                elif limit >= 100 and len(ads) < limit * 0.5:
+                    print(f"API returned only {len(ads)} ads (requested {limit}), falling back to Chromium for full results")
+                    should_fallback = True
+
+                if should_fallback:
+                    return await self._fallback_search(query, limit, country, offset, exclude_ids or [], negative_keywords or [])
+
+                return ads
+            except Exception as e:
+                print(f"API search failed: {e}, falling back to scraper")
+
+        # Fallback to scraper
+        return await self._fallback_search(query, limit, country, offset, exclude_ids or [], negative_keywords or [])
+
+    def _log_api_usage(self, query: str, api_calls: int, ads_returned: int, ads_saved: int):
+        """Log API usage to database"""
+        if not self.db:
+            return
+
+        from app.models import ApiUsageLog
+        from datetime import date
+
+        log = ApiUsageLog(
+            endpoint="facebook_ads_library",
+            api_calls=api_calls,
+            ads_returned=ads_returned,
+            ads_saved=ads_saved,
+            query=query,
+            date=str(date.today())
+        )
+        self.db.add(log)
+        self.db.commit()
+
+    async def _api_search(self, query: str, limit: int, country: str, offset: int, exclude_ids: List[str], negative_keywords: List[str]) -> List[ScrapedAdCreate]:
+        """Search using official Facebook Ads Library API."""
+        ads = []
+        negative_keywords_lower = [kw.lower() for kw in negative_keywords]
+        total_api_calls = 0
+        total_ads_returned = 0
+        filtered_count = 0
+        parse_failed_count = 0
+        blacklist_filtered = 0
+
+        # Get blacklisted pages and keywords
+        blacklisted_pages = set()
+        blacklisted_keywords = []
+        if self.db:
+            from app.models import PageBlacklist, KeywordBlacklist
+            page_blacklist = self.db.query(PageBlacklist).all()
+            blacklisted_pages = {p.page_name.lower() for p in page_blacklist}
+
+            keyword_blacklist = self.db.query(KeywordBlacklist).all()
+            blacklisted_keywords = [k.keyword.lower() for k in keyword_blacklist]
+
+            if blacklisted_pages:
+                print(f"Filtering {len(blacklisted_pages)} blacklisted pages")
+            if blacklisted_keywords:
+                print(f"Filtering {len(blacklisted_keywords)} blacklisted keywords")
+
+        # Combine negative keywords from request with persistent blacklisted keywords
+        all_negative_keywords = negative_keywords_lower + blacklisted_keywords
+
+        async with httpx.AsyncClient() as client:
+            # Make multiple API calls if limit > 300
+            remaining = limit
+            after_cursor = str(offset) if offset > 0 else None
+
+            while remaining > 0:
+                batch_size = min(remaining, 300)  # API max is 300 per request
+                params = {
+                    "access_token": self.access_token,
+                    "ad_reached_countries": country,
+                    "search_terms": query,
+                    "ad_active_status": "ACTIVE",
+                    "limit": batch_size,
+                    "fields": "id,ad_creative_bodies,ad_creative_link_titles,ad_creative_link_captions,ad_snapshot_url,page_name,impressions,spend,currency,publisher_platforms,ad_delivery_start_time,ad_delivery_stop_time"
+                }
+
+                if after_cursor:
+                    params["after"] = after_cursor
+
+                print(f"Calling API: {self.base_url} (batch {total_api_calls + 1}, requesting {batch_size} ads)")
+                response = await client.get(self.base_url, params=params)
+                response.raise_for_status()
+
+                data = response.json()
+                total_api_calls += 1
+
+                if not data.get("data"):
+                    print("No more ads returned from API")
+                    break
+
+                batch_ads = data["data"]
+                total_ads_returned += len(batch_ads)
+                print(f"API returned {len(batch_ads)} ads in this batch")
+
+                for ad_data in batch_ads:
+                    ad_id = ad_data.get("id")
+
+                    # Skip excluded IDs
+                    if ad_id in exclude_ids:
+                        continue
+
+                    parsed_ad = self._parse_api_ad(ad_data)
+                    if not parsed_ad:
+                        parse_failed_count += 1
+                        continue
+
+                    # Filter blacklisted pages
+                    if blacklisted_pages and parsed_ad.brand_name:
+                        if parsed_ad.brand_name.lower() in blacklisted_pages:
+                            blacklist_filtered += 1
+                            continue
+
+                    # Filter negative keywords (whole word matching)
+                    if all_negative_keywords:
+                        text_to_check = ' '.join([
+                            parsed_ad.brand_name or '',
+                            parsed_ad.headline or '',
+                            parsed_ad.ad_copy or '',
+                            parsed_ad.cta_text or ''
+                        ]).lower()
+
+                        # Use whole word matching with word boundaries
+                        import re
+                        should_filter = False
+                        for kw in all_negative_keywords:
+                            # Match whole word only (surrounded by word boundaries)
+                            pattern = r'\b' + re.escape(kw) + r'\b'
+                            if re.search(pattern, text_to_check):
+                                should_filter = True
+                                break
+
+                        if should_filter:
+                            filtered_count += 1
+                            continue
+
+                    ads.append(parsed_ad)
+
+                    if len(ads) >= limit:
+                        break
+
+                # Check if we have pagination cursor for next batch
+                if data.get("paging", {}).get("next"):
+                    after_cursor = data["paging"].get("cursors", {}).get("after")
+                else:
+                    print("No more pages available")
+                    break
+
+                remaining -= batch_size
+
+                # Stop if we've collected enough ads
+                if len(ads) >= limit:
+                    break
+
+            print(f"Total: {total_api_calls} API calls, {total_ads_returned} ads returned, {blacklist_filtered} blacklisted, {filtered_count} filtered, {parse_failed_count} failed, kept {len(ads)} ads")
+
+        # Log API usage
+        self._log_api_usage(query, total_api_calls, total_ads_returned, len(ads))
+
+        return ads
 
     def _parse_api_ad(self, ad_data: dict) -> Optional[ScrapedAdCreate]:
         """Parse an ad from the API response into our schema."""
@@ -53,81 +228,69 @@ class FacebookAdsLibraryAPI:
         # Get ad copy from various fields
         ad_copy = None
         if ad_data.get("ad_creative_bodies"):
-            ad_copy = ad_data["ad_creative_bodies"][0] if isinstance(ad_data["ad_creative_bodies"], list) else ad_data["ad_creative_bodies"]
+            bodies = ad_data["ad_creative_bodies"]
+            ad_copy = bodies[0] if isinstance(bodies, list) and bodies else bodies
 
         # Get headline/title
         headline = None
         if ad_data.get("ad_creative_link_titles"):
             titles = ad_data["ad_creative_link_titles"]
-            headline = titles[0] if isinstance(titles, list) else titles
-
-        # Combine copy with headline if available
-        full_copy = ad_copy or ""
-        if headline and headline != ad_copy:
-            full_copy = f"{headline}\n\n{full_copy}" if full_copy else headline
+            headline = titles[0] if isinstance(titles, list) and titles else titles
 
         # Get CTA from link caption
-        cta_text = "Learn More"
+        cta_text = None
         if ad_data.get("ad_creative_link_captions"):
             captions = ad_data["ad_creative_link_captions"]
-            cta_text = captions[0] if isinstance(captions, list) else captions
-
-        # The API doesn't return media URLs directly, but provides snapshot URL
-        snapshot_url = ad_data.get("ad_snapshot_url")
-
-        # Build analysis data with available metrics
-        analysis = {}
-        if ad_data.get("impressions"):
-            imp = ad_data["impressions"]
-            if isinstance(imp, dict):
-                analysis["impressions_lower"] = imp.get("lower_bound")
-                analysis["impressions_upper"] = imp.get("upper_bound")
-        if ad_data.get("spend"):
-            spend = ad_data["spend"]
-            if isinstance(spend, dict):
-                analysis["spend_lower"] = spend.get("lower_bound")
-                analysis["spend_upper"] = spend.get("upper_bound")
-                analysis["currency"] = ad_data.get("currency")
-        if ad_data.get("publisher_platforms"):
-            analysis["platforms"] = ad_data["publisher_platforms"]
-        if ad_data.get("ad_delivery_start_time"):
-            analysis["start_date"] = ad_data["ad_delivery_start_time"]
+            cta_text = captions[0] if isinstance(captions, list) and captions else captions
 
         # Build the public Facebook Ads Library URL for this ad
         ad_id = ad_data.get("id")
         fb_library_url = f"https://www.facebook.com/ads/library/?id={ad_id}" if ad_id else None
 
-        # ad_snapshot_url is an iframe-embeddable URL that shows the actual ad creative
-        snapshot_url = ad_data.get("ad_snapshot_url")
+        # Get platforms
+        platforms = None
+        if ad_data.get("publisher_platforms"):
+            platforms = [p.lower() for p in ad_data["publisher_platforms"]]
+
+        # Get start date
+        start_date = None
+        if ad_data.get("ad_delivery_start_time"):
+            start_date = ad_data["ad_delivery_start_time"]
+
+        # Detect media type (default to 'image' for now - can be enhanced later with snapshot analysis)
+        # TODO: Parse ad_snapshot_url or use creative fields to detect video vs image vs carousel
+        media_type = "image"
 
         return ScrapedAdCreate(
             brand_name=ad_data.get("page_name", "Unknown Brand"),
-            ad_copy=full_copy[:500] if full_copy else "No copy available",
-            video_url=fb_library_url,  # Use as "View Original" link
-            image_url=snapshot_url,  # iframe-embeddable ad preview URL
+            headline=headline,
+            ad_copy=ad_copy[:500] if ad_copy else None,
             cta_text=cta_text,
             platform="facebook",
             external_id=ad_id,
-            analysis=analysis if analysis else None
+            ad_link=fb_library_url,
+            platforms=platforms,
+            start_date=start_date,
+            media_type=media_type
         )
 
-    async def _fallback_search(self, query: str, limit: int, country: str = "US", offset: int = 0, exclude_ids: List[str] = None) -> List[ScrapedAdCreate]:
+    async def _fallback_search(self, query: str, limit: int, country: str = "US", offset: int = 0, exclude_ids: List[str] = None, negative_keywords: List[str] = None) -> List[ScrapedAdCreate]:
         """
         Scrape Facebook Ads Library using Playwright.
-        Intercepts network requests to capture media URLs and extracts ad data from DOM.
+        Extracts ad text data from DOM without media.
 
         Args:
             offset: Number of scroll batches to skip before collecting (for pagination)
             exclude_ids: Ad IDs to skip (already fetched in previous requests)
+            negative_keywords: Keywords to filter out from results
         """
         exclude_ids = set(exclude_ids or [])
+        negative_keywords = [kw.lower() for kw in (negative_keywords or [])]
         from playwright.async_api import async_playwright
         import urllib.parse
         import json
 
         ads = []
-        captured_images = []  # Store image URLs from network
-        captured_videos = []  # Store video URLs from network
 
         try:
             async with async_playwright() as p:
@@ -138,42 +301,9 @@ class FacebookAdsLibraryAPI:
                 )
                 page = await context.new_page()
 
-                # Intercept network responses to capture media URLs
-                async def handle_response(response):
-                    try:
-                        url = response.url
-                        content_type = response.headers.get('content-type', '')
-
-                        # Capture video URLs from Facebook CDN
-                        if 'video' in url and 'fbcdn' in url:
-                            if url not in captured_videos:
-                                captured_videos.append(url)
-
-                        # Capture image URLs from Facebook CDN (scontent = static content)
-                        if 'scontent' in url and 'fbcdn' in url:
-                            # Skip tiny thumbnails (profile pics, icons)
-                            skip_patterns = ['s60x60', 's32x32', 'p50x50', 'p32x32', 's100x100', 'c10.0']
-                            is_small = any(p in url for p in skip_patterns)
-
-                            # Skip placeholder images (hads = hosted ads default placeholders)
-                            is_placeholder = '/hads-' in url or '/hads/' in url or 'scontent.xx.fbcdn.net' in url
-
-                            # Look for larger images
-                            large_patterns = ['p720x720', 'p480x480', 'p320x320', 's720x720', 's480x480',
-                                            's320x320', '_n.jpg', '_n.png', '_o.jpg', '_o.png']
-                            is_large = any(p in url for p in large_patterns)
-
-                            if is_large and not is_small and not is_placeholder:
-                                if url not in captured_images:
-                                    captured_images.append(url)
-                    except:
-                        pass
-
-                page.on('response', handle_response)
-
                 # Construct URL for Facebook Ads Library
                 params = {
-                    "active_status": "all",
+                    "active_status": "active",
                     "ad_type": "all",
                     "country": country,
                     "q": query,
@@ -204,23 +334,45 @@ class FacebookAdsLibraryAPI:
                     await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
                     await page.wait_for_timeout(1500 if i < base_scrolls else 1000)  # Faster scrolls for pagination
 
-                # Give extra time for images to load
+                # Give extra time for content to load
                 await page.wait_for_timeout(2000)
 
-                print(f"Network captured: {len(captured_videos)} videos, {len(captured_images)} images")
-
-                # Extract ads using improved JavaScript
+                # Extract ads - text only, no media
                 ads_data = await page.evaluate("""
                     () => {
                         const results = [];
                         const seenIds = new Set();
 
-                        // Find all divs that contain "Library ID:"
-                        document.querySelectorAll('div').forEach(div => {
+                        // Find all divs that contain "Library ID:" text directly
+                        const libraryIdDivs = Array.from(document.querySelectorAll('div')).filter(div => {
                             const text = div.innerText || '';
+                            return text.includes('Library ID:');
+                        });
 
-                            // Must contain Library ID and be reasonable size
-                            if (!text.includes('Library ID:') || text.length > 6000 || text.length < 50) return;
+                        // For each Library ID div, find the closest parent that contains the full ad
+                        libraryIdDivs.forEach(idDiv => {
+                            // Walk up the DOM tree to find ad container
+                            let current = idDiv;
+                            let adContainer = null;
+
+                            // Go up max 10 levels to find container with Sponsored + content
+                            for (let i = 0; i < 10 && current; i++) {
+                                const text = current.innerText || '';
+
+                                // Look for container that has: Library ID + Sponsored (or substantial content)
+                                if (text.includes('Library ID:') &&
+                                    (text.includes('Sponsored') || text.length > 200)) {
+                                    // Make sure it's not too large (probably page container)
+                                    if (text.length < 15000) {
+                                        adContainer = current;
+                                    }
+                                }
+                                current = current.parentElement;
+                            }
+
+                            if (!adContainer) return;
+
+                            const text = adContainer.innerText || '';
 
                             // Extract Library ID
                             const idMatch = text.match(/Library ID:\\s*(\\d+)/);
@@ -230,122 +382,78 @@ class FacebookAdsLibraryAPI:
                             if (seenIds.has(libraryId)) return;
                             seenIds.add(libraryId);
 
-                            // Find brand name from links to page
+                            // Split text into lines (handle newlines properly)
+                            const lines = text.split(String.fromCharCode(10)).map(l => l.trim()).filter(l => l.length > 0 && l !== String.fromCharCode(8203));
+
+                            // Find brand name - line immediately before "Sponsored"
                             let brandName = 'Unknown Brand';
-                            const allLinks = div.querySelectorAll('a');
-                            for (const link of allLinks) {
-                                const href = link.href || '';
-                                const linkText = (link.innerText || '').trim();
-                                // Brand links usually contain view_all_page_id or are short text
-                                if (linkText && linkText.length > 1 && linkText.length < 60 &&
-                                    !linkText.includes('Library ID') &&
-                                    !linkText.includes('See ad details') &&
-                                    !linkText.includes('About') &&
-                                    !linkText.match(/^\\d+$/) &&
-                                    !linkText.includes('Active') &&
-                                    !linkText.includes('Inactive')) {
-                                    brandName = linkText;
+                            let sponsoredIndex = -1;
+
+                            for (let i = 0; i < lines.length; i++) {
+                                if (lines[i] === 'Sponsored') {
+                                    sponsoredIndex = i;
+                                    // Brand is usually the line right before "Sponsored"
+                                    if (i > 0) {
+                                        const candidate = lines[i - 1];
+                                        // Make sure it's not metadata
+                                        if (candidate && candidate.length > 3 && candidate.length < 150 &&
+                                            !candidate.includes('Library ID') &&
+                                            !candidate.includes('See ad details') &&
+                                            !candidate.includes('Menu') &&
+                                            candidate !== 'Active' &&
+                                            candidate !== 'Inactive') {
+                                            brandName = candidate;
+                                        }
+                                    }
                                     break;
                                 }
                             }
 
-                            // Find ad copy - look for text blocks
+                            // Extract ad content - everything after "Sponsored" until we hit metadata or URLs
                             let adCopy = '';
-                            div.querySelectorAll('span, div').forEach(el => {
-                                if (el.children.length > 5) return; // Skip containers
-                                const elText = (el.innerText || '').trim();
-                                if (elText.length > 30 && elText.length < 1500 &&
-                                    !elText.includes('Library ID') &&
-                                    !elText.includes('Started running') &&
-                                    !elText.includes('About this ad') &&
-                                    !elText.includes('See ad details') &&
-                                    elText.length > adCopy.length) {
-                                    adCopy = elText;
+                            let headline = '';
+                            let captureContent = false;
+
+                            for (let i = sponsoredIndex + 1; i < lines.length; i++) {
+                                const line = lines[i];
+
+                                // Stop at certain patterns
+                                if (line.includes('Library ID') ||
+                                    line.includes('Started running') ||
+                                    line.includes('Platforms') ||
+                                    line.includes('http://') ||
+                                    line.includes('https://') ||
+                                    line.includes('HTTPS://') ||
+                                    line.includes('HTTP://')) {
+                                    break;
                                 }
-                            });
 
-                            // Detect if this is a video ad by looking for video indicators
-                            let isVideoAd = false;
+                                // Skip empty or very short lines
+                                if (line.length < 3) continue;
 
-                            // Check for actual video elements
-                            const hasVideoElement = div.querySelector('video') !== null;
-                            if (hasVideoElement) isVideoAd = true;
-
-                            // Check for play button SVGs/icons (common in FB video ads)
-                            const playIcons = div.querySelectorAll('svg, i, [role="img"]');
-                            playIcons.forEach(icon => {
-                                const parent = icon.closest('div');
-                                if (parent) {
-                                    const style = window.getComputedStyle(parent);
-                                    // Play buttons are often circular overlays
-                                    if (style.borderRadius && parseFloat(style.borderRadius) > 20) {
-                                        const html = icon.outerHTML || '';
-                                        // Play icon paths typically have triangle shapes
-                                        if (html.includes('M8') || html.includes('play') || html.includes('Play')) {
-                                            isVideoAd = true;
-                                        }
-                                    }
+                                // First substantive line is headline
+                                if (!headline && line.length >= 10) {
+                                    headline = line;
+                                    captureContent = true;
+                                    continue;
                                 }
-                            });
 
-                            // Check for video duration indicators (e.g., "0:30", "1:15")
-                            const durationMatch = text.match(/\\b\\d{1,2}:\\d{2}\\b/);
-                            if (durationMatch) isVideoAd = true;
-
-                            // Find video - check video elements
-                            let videoUrl = null;
-                            div.querySelectorAll('video').forEach(video => {
-                                if (videoUrl) return;
-                                const src = video.src || video.currentSrc;
-                                if (src && src.includes('fbcdn')) {
-                                    videoUrl = src;
+                                // Capture remaining lines as ad copy
+                                if (captureContent && line.length >= 10) {
+                                    adCopy += (adCopy ? '\\n' : '') + line;
                                 }
-                                // Check source elements
-                                video.querySelectorAll('source').forEach(source => {
-                                    if (!videoUrl && source.src && source.src.includes('fbcdn')) {
-                                        videoUrl = source.src;
-                                    }
-                                });
-                            });
-
-                            // Find image - check img elements for CDN URLs
-                            let imageUrl = null;
-                            div.querySelectorAll('img').forEach(img => {
-                                if (imageUrl) return;
-                                const src = img.src || '';
-                                // Look for scontent URLs that aren't tiny profile pics
-                                if (src.includes('scontent') && src.includes('fbcdn')) {
-                                    // Skip small thumbnails (profile pics, icons)
-                                    const skipPatterns = ['s60x60', 's32x32', 'p50x50', 'p32x32', 's100x100', 'c10.0'];
-                                    const isSmall = skipPatterns.some(p => src.includes(p));
-
-                                    // Skip placeholder images (hads-ak = hosted ads default)
-                                    const isPlaceholder = src.includes('hads-ak') || src.includes('hads-prn');
-
-                                    // Look for larger ad creative images
-                                    const largePatterns = ['p720x720', 'p480x480', 'p320x320', 's720x720',
-                                                          's480x480', 's320x320', '_n.', '_o.'];
-                                    const isLarge = largePatterns.some(p => src.includes(p)) ||
-                                                   img.naturalWidth > 200 || img.width > 200;
-
-                                    if (isLarge && !isSmall && !isPlaceholder) {
-                                        imageUrl = src;
-                                    }
-                                }
-                            });
-
-                            // Check background images if no img found
-                            if (!imageUrl && !videoUrl) {
-                                div.querySelectorAll('div').forEach(bgDiv => {
-                                    if (imageUrl) return;
-                                    const style = window.getComputedStyle(bgDiv);
-                                    const bg = style.backgroundImage;
-                                    if (bg && bg !== 'none' && bg.includes('scontent')) {
-                                        const match = bg.match(/url\\(["']?([^"')]+)["']?\\)/);
-                                        if (match) imageUrl = match[1];
-                                    }
-                                });
                             }
+
+                            // Extract CTA button text
+                            let ctaText = null;
+                            adContainer.querySelectorAll('a, button').forEach(el => {
+                                const elText = (el.innerText || '').trim();
+                                const commonCTAs = ['learn more', 'shop now', 'sign up', 'get started',
+                                                   'download', 'subscribe', 'buy now', 'see more'];
+                                if (commonCTAs.some(cta => elText.toLowerCase().includes(cta))) {
+                                    ctaText = elText;
+                                }
+                            });
 
                             // Extract platforms
                             let platforms = [];
@@ -359,24 +467,13 @@ class FacebookAdsLibraryAPI:
                             const dateMatch = text.match(/Started running on\\s+([A-Za-z]+\\s+\\d+,?\\s*\\d*)/);
                             if (dateMatch) startDate = dateMatch[1];
 
-                            // Try to find "See ad details" link which contains the ad_snapshot_url (render_ad)
-                            let snapshotUrl = null;
-                            div.querySelectorAll('a').forEach(link => {
-                                const href = link.href || '';
-                                if (href.includes('/ads/archive/render_ad/')) {
-                                    snapshotUrl = href;
-                                }
-                            });
-
                             results.push({
                                 external_id: libraryId,
                                 brand_name: brandName,
+                                headline: headline || null,
                                 ad_copy: adCopy.substring(0, 500),
-                                video_url: videoUrl,
-                                image_url: imageUrl,
-                                snapshot_url: snapshotUrl,  // iframe-embeddable URL for actual creative
-                                is_video: isVideoAd,  // Flag for video ads (even if we only have thumbnail)
-                                platforms: platforms,
+                                cta_text: ctaText,
+                                platforms: platforms.length > 0 ? platforms : null,
                                 start_date: startDate
                             });
                         });
@@ -387,59 +484,47 @@ class FacebookAdsLibraryAPI:
 
                 print(f"Found {len(ads_data)} ads from DOM")
 
-                # Filter out excluded IDs first
+                # Filter out excluded IDs
                 if exclude_ids:
                     ads_data = [ad for ad in ads_data if ad.get('external_id') not in exclude_ids]
                     print(f"After filtering excludes: {len(ads_data)} ads")
 
-                # Assign captured network media to ads that don't have media
-                video_idx = 0
-                image_idx = 0
+                # Filter out negative keywords
+                if negative_keywords:
+                    filtered = []
+                    for ad_data in ads_data:
+                        # Check all text fields for negative keywords
+                        text_to_check = ' '.join([
+                            ad_data.get('brand_name', ''),
+                            ad_data.get('headline', ''),
+                            ad_data.get('ad_copy', ''),
+                            ad_data.get('cta_text', '')
+                        ]).lower()
 
+                        # Skip if any negative keyword found
+                        has_negative = any(kw in text_to_check for kw in negative_keywords)
+                        if not has_negative:
+                            filtered.append(ad_data)
+
+                    ads_data = filtered
+                    print(f"After filtering negative keywords: {len(ads_data)} ads")
+
+                # Build ScrapedAdCreate objects
                 for i, ad_data in enumerate(ads_data[:limit]):
                     try:
-                        video_url = ad_data.get('video_url')
-                        image_url = ad_data.get('image_url')
-                        snapshot_url = ad_data.get('snapshot_url')
-                        is_video = ad_data.get('is_video', False)
-
-                        # If no media from DOM, try captured network media
-                        if not video_url and not image_url:
-                            if video_idx < len(captured_videos):
-                                video_url = captured_videos[video_idx]
-                                video_idx += 1
-                                is_video = True  # Mark as video since we got a video URL
-                            elif image_idx < len(captured_images):
-                                image_url = captured_images[image_idx]
-                                image_idx += 1
-
-                        # Build FB library URL for "View Original"
+                        # Build FB library URL
                         fb_library_url = f"https://www.facebook.com/ads/library/?id={ad_data['external_id']}"
-
-                        analysis = {}
-                        if ad_data.get('platforms'):
-                            analysis['platforms'] = ad_data['platforms']
-                        if ad_data.get('start_date'):
-                            analysis['start_date'] = ad_data['start_date']
-                        if snapshot_url:
-                            analysis['snapshot_url'] = snapshot_url  # Store render_ad URL
-                        if is_video:
-                            analysis['is_video'] = True  # Flag for frontend to show video indicator
-
-                        # Priority: video_url > image_url > snapshot_url (iframe)
-                        # CDN URLs expire but work for immediate viewing
-                        # snapshot_url is more reliable but requires iframe
-                        final_image_url = video_url or image_url or snapshot_url
 
                         ad = ScrapedAdCreate(
                             brand_name=ad_data.get('brand_name', 'Unknown Brand'),
+                            headline=ad_data.get('headline'),
                             ad_copy=ad_data.get('ad_copy', 'No copy available')[:500],
-                            video_url=fb_library_url,  # Always use library URL for video_url (clickable link)
-                            image_url=final_image_url,  # CDN URL or render_ad fallback
-                            cta_text="Learn More",
+                            cta_text=ad_data.get('cta_text'),
                             platform="facebook",
                             external_id=ad_data['external_id'],
-                            analysis=analysis if analysis else None
+                            ad_link=fb_library_url,
+                            platforms=ad_data.get('platforms'),
+                            start_date=ad_data.get('start_date')
                         )
                         ads.append(ad)
 
