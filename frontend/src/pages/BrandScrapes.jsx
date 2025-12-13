@@ -21,9 +21,10 @@ const BrandScrapes = () => {
     const fetchScrapes = async () => {
         try {
             const data = await getBrandScrapes();
-            setScrapes(data);
+            setScrapes(Array.isArray(data) ? data : []);
         } catch (error) {
             showError('Failed to load brand scrapes');
+            setScrapes([]);
         }
     };
 
@@ -68,9 +69,14 @@ const BrandScrapes = () => {
         setExpandedScrape(scrapeId);
         try {
             const details = await getBrandScrape(scrapeId);
+            // Ensure ads is always an array
+            if (details && !Array.isArray(details.ads)) {
+                details.ads = [];
+            }
             setScrapeDetails(details);
         } catch (error) {
             showError('Failed to load scrape details');
+            setScrapeDetails(null);
         }
     };
 
