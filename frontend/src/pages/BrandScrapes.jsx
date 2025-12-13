@@ -336,9 +336,14 @@ const BrandScrapes = () => {
                                                                 </p>
                                                             )}
                                                             {ad.ad_copy && (
-                                                                <p className="text-xs text-gray-500 line-clamp-2">
+                                                                <p className="text-xs text-gray-500 line-clamp-2 mb-1">
                                                                     {ad.ad_copy}
                                                                 </p>
+                                                            )}
+                                                            {ad.cta_text && (
+                                                                <span className="inline-block px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded mb-1">
+                                                                    {ad.cta_text}
+                                                                </span>
                                                             )}
                                                             <div className="mt-2 flex items-center justify-between">
                                                                 <span className="text-xs text-gray-400">
