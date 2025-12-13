@@ -197,8 +197,10 @@ class BrandScraperService:
                     await page.wait_for_timeout(5000)
 
                     # Check if logged in
-                    if "login" in page.url.lower():
-                        print("Warning: Facebook login may have failed")
+                    current_url = page.url.lower()
+                    if "login" in current_url or "checkpoint" in current_url:
+                        error_detail = "Login page still showing" if "login" in current_url else "Security checkpoint triggered"
+                        raise Exception(f"Facebook login failed: {error_detail}. URL: {page.url}")
                     else:
                         print("Facebook login successful")
 
@@ -302,9 +304,11 @@ class BrandScraperService:
                 await browser.close()
 
         except Exception as e:
-            print(f"Playwright error: {e}")
+            error_msg = f"Playwright scrape failed: {str(e)}"
+            print(error_msg)
             import traceback
             traceback.print_exc()
+            raise Exception(error_msg)
 
         return ads[:limit]
 
