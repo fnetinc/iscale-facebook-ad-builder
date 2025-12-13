@@ -222,11 +222,11 @@ Production uses Railway PostgreSQL. Local dev connects to the same Railway datab
 
 ### Local Development
 
-Uses Railway PostgreSQL (configured in `.env`). No local database setup needed.
+Uses Railway PostgreSQL (configured in `.env.local`). No local database setup needed.
 
 ### Environment Variables
 
-Create `.env` in project root:
+Create `.env.local` in project root:
 
 ```bash
 # Database (Railway PostgreSQL)
@@ -311,6 +311,15 @@ SECRET_KEY=...  # Generate with: python -c "import secrets; print(secrets.token_
 3. Database is Railway PostgreSQL service
 4. Custom domain: breadwinner.a4d.com → CNAME to Railway
 
+**IMPORTANT - Post-Deploy Verification:**
+After every `git push` to main, ALWAYS verify the deployment succeeded:
+```bash
+# Wait ~30-60s for Railway to rebuild, then check logs
+railway logs --tail 30
+```
+Look for: "Uvicorn running on http://0.0.0.0:8080" = success
+Watch for: ModuleNotFoundError, KeyError in migrations, or crash loops
+
 **Cloudflare R2 Setup:**
 - Bucket: `breadwinner`
 - Public access enabled via R2.dev URL
@@ -318,7 +327,8 @@ SECRET_KEY=...  # Generate with: python -c "import secrets; print(secrets.token_
 
 ## Common Gotchas
 
-- Database migrations not automated - use Alembic if schema changes needed
+- Database migrations run automatically on deploy via Dockerfile CMD
+- Always commit ALL new migration files and their dependencies before pushing
 - Frontend API URL set via `VITE_API_URL` env var (build-time, not runtime)
 - When adding new origins: update CORS in `main.py` AND CSP in `index.html`
 - Ad account IDs auto-prefixed with 'act_' if missing (facebook_service.py)
