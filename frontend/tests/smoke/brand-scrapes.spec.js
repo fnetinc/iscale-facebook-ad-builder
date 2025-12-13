@@ -23,9 +23,9 @@ test.describe('Brand Scrapes Smoke Tests', () => {
     // Check page title
     await expect(page.locator('h1, h2').filter({ hasText: /scrape.*brand|brand.*scrape/i })).toBeVisible({ timeout: 10000 });
 
-    // Check form elements
-    await expect(page.locator('input[type="text"], input[placeholder*="brand" i]')).toBeVisible();
-    await expect(page.locator('input[type="url"], input[placeholder*="facebook" i]')).toBeVisible();
+    // Check form elements - use actual placeholders
+    await expect(page.locator('input[placeholder*="Nike"]')).toBeVisible();
+    await expect(page.locator('input[placeholder*="view_all_page_id"]')).toBeVisible();
   });
 
   test('brand scrapes navigation works', async ({ page }) => {
@@ -39,9 +39,12 @@ test.describe('Brand Scrapes Smoke Tests', () => {
   test('form validation shows error for invalid URL', async ({ page }) => {
     await page.goto(`${BASE_URL}/research/brand-scrapes`);
 
+    // Wait for form to load
+    await page.waitForSelector('input[placeholder*="Nike"]', { timeout: 10000 });
+
     // Fill form with invalid URL (missing view_all_page_id)
-    await page.fill('input[placeholder*="brand" i], input[type="text"]', 'TestBrand');
-    await page.fill('input[placeholder*="facebook" i], input[type="url"]', 'https://facebook.com/invalid');
+    await page.fill('input[placeholder*="Nike"]', 'TestBrand');
+    await page.fill('input[placeholder*="view_all_page_id"]', 'https://facebook.com/invalid');
 
     // Submit
     await page.click('button[type="submit"]');
