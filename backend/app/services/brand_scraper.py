@@ -166,11 +166,12 @@ class BrandScraperService:
         return ads
 
     async def _playwright_scrape_ads(self, query: str, limit: int = 500, is_search: bool = True) -> List[dict]:
-        """Scrape ads using Playwright browser automation."""
+        """Scrape ads using Playwright browser automation with response interception for media."""
         from playwright.async_api import async_playwright
         import urllib.parse
 
         ads = []
+        captured_images = {}  # url -> bytes
         fb_email = os.getenv("FB_SCRAPER_EMAIL")
         fb_password = os.getenv("FB_SCRAPER_PASSWORD")
 
@@ -182,6 +183,20 @@ class BrandScraperService:
                     user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 )
                 page = await context.new_page()
+
+                # Capture images as they load
+                async def capture_image_response(response):
+                    url = response.url
+                    content_type = response.headers.get('content-type', '')
+                    if 'image' in content_type and ('scontent' in url or 'fbcdn' in url):
+                        try:
+                            body = await response.body()
+                            if len(body) > 5000:  # Only substantial images
+                                captured_images[url] = body
+                        except:
+                            pass
+
+                page.on('response', capture_image_response)
 
                 # Login to Facebook if credentials provided
                 if fb_email and fb_password:
@@ -277,11 +292,25 @@ class BrandScraperService:
                                 if (match) pageId = match[1];
                             });
 
-                            // Get images
+                            // Get images - try multiple selectors
                             const imageUrls = [];
-                            div.querySelectorAll('img[src*="scontent"]').forEach(img => {
-                                if (img.src && !img.src.includes('emoji') && img.width > 50) {
+                            // Try scontent images first
+                            div.querySelectorAll('img[src*="scontent"], img[src*="fbcdn"]').forEach(img => {
+                                if (img.src && !img.src.includes('emoji') && img.width > 50 && !imageUrls.includes(img.src)) {
                                     imageUrls.push(img.src);
+                                }
+                            });
+                            // Also check for data-src (lazy loaded)
+                            div.querySelectorAll('img[data-src*="scontent"], img[data-src*="fbcdn"]').forEach(img => {
+                                if (img.dataset.src && !imageUrls.includes(img.dataset.src)) {
+                                    imageUrls.push(img.dataset.src);
+                                }
+                            });
+                            // Check for background images in style
+                            div.querySelectorAll('[style*="background-image"]').forEach(el => {
+                                const match = el.style.backgroundImage.match(/url\\(["']?(https:[^"')]+)["']?\\)/);
+                                if (match && (match[1].includes('scontent') || match[1].includes('fbcdn')) && !imageUrls.includes(match[1])) {
+                                    imageUrls.push(match[1]);
                                 }
                             });
 
@@ -300,7 +329,44 @@ class BrandScraperService:
                     }
                 """)
 
-                print(f"Playwright extracted {len(ads)} ads")
+                print(f"Playwright extracted {len(ads)} ads, captured {len(captured_images)} images from network")
+
+                # Log image URL stats
+                total_img_urls = sum(len(ad.get('_image_urls', [])) for ad in ads)
+                print(f"Total image URLs extracted from DOM: {total_img_urls}")
+
+                # Attach captured image data to ads
+                matched_count = 0
+                for ad in ads:
+                    ad['_media_data'] = []
+                    for img_url in ad.get('_image_urls', [])[:5]:
+                        if img_url in captured_images:
+                            ad['_media_data'].append({
+                                'url': img_url,
+                                'type': 'image',
+                                'content_type': 'image/jpeg',
+                                'data': captured_images[img_url]
+                            })
+                            matched_count += 1
+
+                print(f"Matched {matched_count} images to ads")
+
+                # If few matches, distribute captured images to ads without media
+                if matched_count < len(ads) // 2 and captured_images:
+                    print("Low match rate, distributing captured images to ads")
+                    remaining_images = list(captured_images.items())
+                    img_idx = 0
+                    for ad in ads:
+                        if not ad['_media_data'] and img_idx < len(remaining_images):
+                            url, data = remaining_images[img_idx]
+                            ad['_media_data'].append({
+                                'url': url,
+                                'type': 'image',
+                                'content_type': 'image/jpeg',
+                                'data': data
+                            })
+                            img_idx += 1
+
                 await browser.close()
 
         except Exception as e:
