@@ -320,6 +320,39 @@ railway logs --tail 30
 Look for: "Uvicorn running on http://0.0.0.0:8080" = success
 Watch for: ModuleNotFoundError, KeyError in migrations, or crash loops
 
+**MANDATORY - Feature Testing After Deployment:**
+For ANY new feature deployment, run ALL applicable tests:
+
+1. **Smoke Tests** (always required):
+```bash
+cd frontend
+BASE_URL=https://breadwinner.a4d.com TEST_EMAIL=jasona@a4d.com TEST_PASSWORD='<password>' \
+  npx playwright test tests/smoke/<feature>.spec.js --reporter=list
+```
+
+2. **E2E Tests** (for user flows):
+```bash
+npx playwright test tests/e2e/<feature>.spec.js --headed
+```
+
+3. **Unit Tests** (for backend logic):
+```bash
+cd backend
+pytest tests/test_<feature>.py -v
+```
+
+**Test file locations:**
+- Frontend smoke: `frontend/tests/smoke/*.spec.js`
+- Frontend e2e: `frontend/tests/e2e/*.spec.js`
+- Backend unit: `backend/tests/test_*.py`
+
+**For new features, MUST create:**
+- Smoke test: page loads, nav works, basic form validation
+- E2E test: full user flow (create, read, update, delete)
+- Unit test: service/API logic (backend)
+
+Never consider a feature "done" until all tests pass against production URL.
+
 **Cloudflare R2 Setup:**
 - Bucket: `breadwinner`
 - Public access enabled via R2.dev URL
