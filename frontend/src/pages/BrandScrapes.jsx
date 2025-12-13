@@ -169,10 +169,12 @@ const BrandScrapes = () => {
                 <h2 className="text-lg font-semibold text-amber-900 mb-4">New Brand Scrape</h2>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label htmlFor="brandName" className="block text-sm font-medium text-gray-700 mb-1">
                             Brand Name
                         </label>
                         <input
+                            id="brandName"
+                            name="brandName"
                             type="text"
                             value={brandName}
                             onChange={(e) => setBrandName(e.target.value)}
@@ -182,10 +184,12 @@ const BrandScrapes = () => {
                         <p className="text-xs text-gray-500 mt-1">This will be the folder name on R2 storage</p>
                     </div>
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                        <label htmlFor="pageInput" className="block text-sm font-medium text-gray-700 mb-1">
                             Facebook Page ID or Ads Library URL
                         </label>
                         <input
+                            id="pageInput"
+                            name="pageInput"
                             type="text"
                             value={pageInput}
                             onChange={(e) => setPageInput(e.target.value)}
