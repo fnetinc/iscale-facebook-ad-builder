@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = '/api/v1/research';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
+const API_URL = `${API_BASE}/research`;
 
 export const searchAndSave = async (request) => {
     try {
