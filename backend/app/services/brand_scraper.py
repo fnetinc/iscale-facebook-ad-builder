@@ -116,9 +116,15 @@ class BrandScraperService:
         # Check if page_id is actually a search query (non-numeric)
         is_search_query = not page_id.isdigit()
 
+        # Use Playwright for search queries (gets more results than API)
+        if is_search_query:
+            print(f"Using Playwright for search query: {page_id}")
+            return await self._playwright_scrape_ads(page_id, limit, is_search=True)
+
+        # Use API for page-specific scrapes if we have a token
         if not self.access_token:
-            print("No Facebook access token available")
-            raise Exception("Facebook access token not configured. Please set FACEBOOK_ADS_LIBRARY_TOKEN or VITE_FACEBOOK_ACCESS_TOKEN.")
+            print("No FB token, using Playwright for page scrape")
+            return await self._playwright_scrape_ads(page_id, limit, is_search=False)
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             after_cursor = None
@@ -129,16 +135,9 @@ class BrandScraperService:
                     "ad_active_status": "ALL",
                     "ad_reached_countries": "US",
                     "limit": min(300, limit - len(ads)),
-                    "fields": "id,ad_creative_bodies,ad_creative_link_titles,ad_creative_link_captions,ad_snapshot_url,page_id,page_name,publisher_platforms,ad_delivery_start_time"
+                    "fields": "id,ad_creative_bodies,ad_creative_link_titles,ad_creative_link_captions,ad_snapshot_url,page_id,page_name,publisher_platforms,ad_delivery_start_time",
+                    "search_page_ids": page_id
                 }
-
-                # Use search_terms for keyword search, search_page_ids for page-specific
-                if is_search_query:
-                    params["search_terms"] = page_id
-                    print(f"Searching for ads with term: {page_id}")
-                else:
-                    params["search_page_ids"] = page_id
-                    print(f"Fetching ads for page: {page_id}")
 
                 if after_cursor:
                     params["after"] = after_cursor
@@ -154,7 +153,6 @@ class BrandScraperService:
                     ads.extend(data["data"])
                     print(f"Fetched {len(data['data'])} ads, total: {len(ads)}")
 
-                    # Check for next page
                     paging = data.get("paging", {})
                     if paging.get("next"):
                         after_cursor = paging.get("cursors", {}).get("after")
@@ -162,10 +160,132 @@ class BrandScraperService:
                         break
 
                 except Exception as e:
-                    print(f"API error: {e}")
-                    raise
+                    print(f"API error: {e}, falling back to Playwright")
+                    return await self._playwright_scrape_ads(page_id, limit, is_search=False)
 
         return ads
+
+    async def _playwright_scrape_ads(self, query: str, limit: int = 500, is_search: bool = True) -> List[dict]:
+        """Scrape ads using Playwright browser automation."""
+        from playwright.async_api import async_playwright
+        import urllib.parse
+
+        ads = []
+
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch(headless=True)
+                context = await browser.new_context(
+                    viewport={'width': 1920, 'height': 1080},
+                    user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                )
+                page = await context.new_page()
+
+                # Build URL
+                if is_search:
+                    search_query = urllib.parse.quote(query)
+                    url = f"https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=all&q={search_query}"
+                else:
+                    url = f"https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&view_all_page_id={query}"
+
+                print(f"Playwright navigating to: {url}")
+                await page.goto(url, timeout=60000, wait_until="networkidle")
+
+                # Wait for ads to load
+                try:
+                    await page.wait_for_selector('text=Library ID:', timeout=15000)
+                except:
+                    print("No ads found or page didn't load properly")
+                    await browser.close()
+                    return []
+
+                # Scroll to load more ads
+                scroll_count = min(20, limit // 10)
+                for i in range(scroll_count):
+                    await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                    await page.wait_for_timeout(1500)
+                    print(f"Scroll {i+1}/{scroll_count}")
+
+                # Extract ad data from DOM
+                ads = await page.evaluate("""
+                    () => {
+                        const results = [];
+                        const seenIds = new Set();
+
+                        document.querySelectorAll('div').forEach(div => {
+                            const text = div.innerText || '';
+                            const idMatch = text.match(/Library ID:\\s*(\\d+)/);
+                            if (!idMatch) return;
+
+                            const libraryId = idMatch[1];
+                            if (seenIds.has(libraryId)) return;
+                            seenIds.add(libraryId);
+
+                            // Extract page name
+                            let pageName = null;
+                            const sponsoredIdx = text.indexOf('Sponsored');
+                            if (sponsoredIdx > 0) {
+                                const before = text.substring(0, sponsoredIdx).split('\\n').filter(l => l.trim());
+                                if (before.length) pageName = before[before.length - 1].trim();
+                            }
+
+                            // Extract headline and copy
+                            let headline = null, adCopy = null, ctaText = null;
+                            const lines = text.split('\\n').map(l => l.trim()).filter(l => l);
+                            const sponsoredLine = lines.findIndex(l => l === 'Sponsored');
+                            if (sponsoredLine >= 0) {
+                                for (let i = sponsoredLine + 1; i < lines.length; i++) {
+                                    if (lines[i].includes('Library ID')) break;
+                                    if (!headline && lines[i].length > 10) headline = lines[i];
+                                    else if (headline && lines[i].length > 10 && !adCopy) adCopy = lines[i];
+                                }
+                            }
+
+                            // Find CTA
+                            const ctaPatterns = ['Learn More', 'Shop Now', 'Sign Up', 'Get Offer', 'Book Now', 'Download', 'Apply Now', 'Subscribe'];
+                            for (const cta of ctaPatterns) {
+                                if (text.includes(cta)) { ctaText = cta; break; }
+                            }
+
+                            // Find page link
+                            let pageId = null;
+                            div.querySelectorAll('a[href*="view_all_page_id"]').forEach(link => {
+                                const match = link.href.match(/view_all_page_id=(\\d+)/);
+                                if (match) pageId = match[1];
+                            });
+
+                            // Get images
+                            const imageUrls = [];
+                            div.querySelectorAll('img[src*="scontent"]').forEach(img => {
+                                if (img.src && !img.src.includes('emoji') && img.width > 50) {
+                                    imageUrls.push(img.src);
+                                }
+                            });
+
+                            results.push({
+                                id: libraryId,
+                                page_name: pageName,
+                                page_id: pageId,
+                                ad_creative_link_titles: headline ? [headline] : null,
+                                ad_creative_bodies: adCopy ? [adCopy] : null,
+                                ad_creative_link_captions: ctaText ? [ctaText] : null,
+                                _image_urls: imageUrls
+                            });
+                        });
+
+                        return results;
+                    }
+                """)
+
+                print(f"Playwright extracted {len(ads)} ads")
+                await browser.close()
+
+        except Exception as e:
+            print(f"Playwright error: {e}")
+            import traceback
+            traceback.print_exc()
+
+        return ads[:limit]
 
     async def _fallback_fetch_page_ads(self, page_id: str, limit: int = 500, brand_name: str = None, is_search: bool = False) -> List[dict]:
         """Fallback to Playwright for scraping when API unavailable. Captures both images and videos."""
