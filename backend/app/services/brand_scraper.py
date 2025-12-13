@@ -171,15 +171,36 @@ class BrandScraperService:
         import urllib.parse
 
         ads = []
+        fb_email = os.getenv("FB_SCRAPER_EMAIL")
+        fb_password = os.getenv("FB_SCRAPER_PASSWORD")
 
         try:
             async with async_playwright() as p:
                 browser = await p.chromium.launch(headless=True)
                 context = await browser.new_context(
                     viewport={'width': 1920, 'height': 1080},
-                    user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+                    user_agent='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
                 )
                 page = await context.new_page()
+
+                # Login to Facebook if credentials provided
+                if fb_email and fb_password:
+                    print("Logging into Facebook...")
+                    await page.goto("https://www.facebook.com/login", timeout=30000)
+                    await page.wait_for_timeout(2000)
+
+                    await page.fill('input[name="email"]', fb_email)
+                    await page.fill('input[name="pass"]', fb_password)
+                    await page.click('button[name="login"]')
+
+                    # Wait for login to complete
+                    await page.wait_for_timeout(5000)
+
+                    # Check if logged in
+                    if "login" in page.url.lower():
+                        print("Warning: Facebook login may have failed")
+                    else:
+                        print("Facebook login successful")
 
                 # Build URL
                 if is_search:
