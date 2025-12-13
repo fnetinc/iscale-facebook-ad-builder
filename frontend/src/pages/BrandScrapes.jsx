@@ -6,7 +6,26 @@ import { Search, Trash2, ChevronDown, ChevronRight, ExternalLink, Image, Video, 
 const BrandScrapes = () => {
     const { showSuccess, showError, showInfo } = useToast();
     const [brandName, setBrandName] = useState('');
-    const [pageUrl, setPageUrl] = useState('');
+    const [pageInput, setPageInput] = useState('');
+
+    // Build full URL from page ID or extract from URL
+    const buildPageUrl = (input) => {
+        const trimmed = input.trim();
+        // If it's just numbers, treat as page ID
+        if (/^\d+$/.test(trimmed)) {
+            return `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=all&view_all_page_id=${trimmed}`;
+        }
+        // If it's a URL with view_all_page_id, use as-is
+        if (trimmed.includes('view_all_page_id=')) {
+            return trimmed;
+        }
+        // Try to extract page ID from various FB URL formats
+        const pageIdMatch = trimmed.match(/(?:page_id=|pages\/|facebook\.com\/)(\d+)/);
+        if (pageIdMatch) {
+            return `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=all&view_all_page_id=${pageIdMatch[1]}`;
+        }
+        return null;
+    };
     const [scrapes, setScrapes] = useState([]);
     const [loading, setLoading] = useState(false);
     const [expandedScrape, setExpandedScrape] = useState(null);
@@ -35,12 +54,14 @@ const BrandScrapes = () => {
             showError('Please enter a brand name');
             return;
         }
-        if (!pageUrl.trim()) {
-            showError('Please enter a Facebook Ads Library URL');
+        if (!pageInput.trim()) {
+            showError('Please enter a Facebook Page ID or Ads Library URL');
             return;
         }
-        if (!pageUrl.includes('view_all_page_id')) {
-            showError('URL must contain view_all_page_id parameter');
+
+        const pageUrl = buildPageUrl(pageInput);
+        if (!pageUrl) {
+            showError('Invalid input. Enter a Page ID (numbers) or a Facebook Ads Library URL');
             return;
         }
 
@@ -49,7 +70,7 @@ const BrandScrapes = () => {
             await createBrandScrape(brandName, pageUrl);
             showSuccess('Brand scrape started! Check back soon for results.');
             setBrandName('');
-            setPageUrl('');
+            setPageInput('');
             fetchScrapes();
         } catch (error) {
             const message = error.response?.data?.detail || 'Failed to start scrape';
@@ -162,17 +183,17 @@ const BrandScrapes = () => {
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">
-                            Facebook Ads Library URL
+                            Facebook Page ID or Ads Library URL
                         </label>
                         <input
-                            type="url"
-                            value={pageUrl}
-                            onChange={(e) => setPageUrl(e.target.value)}
-                            placeholder="https://www.facebook.com/ads/library/?...&view_all_page_id=123456789"
+                            type="text"
+                            value={pageInput}
+                            onChange={(e) => setPageInput(e.target.value)}
+                            placeholder="123456789 or https://www.facebook.com/ads/library/?...&view_all_page_id=123456789"
                             className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                            Must include <code className="bg-gray-100 px-1 rounded">view_all_page_id</code> parameter
+                            Paste a Page ID or full Ads Library URL - we'll handle the rest
                         </p>
                     </div>
                     <button
