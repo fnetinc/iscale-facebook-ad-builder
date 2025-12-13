@@ -73,6 +73,8 @@ class BrandScrapeCreate(BaseModel):
 class BrandScrapedAdResponse(BaseModel):
     id: str
     external_id: str
+    page_name: Optional[str] = None
+    page_link: Optional[str] = None
     headline: Optional[str] = None
     ad_copy: Optional[str] = None
     cta_text: Optional[str] = None

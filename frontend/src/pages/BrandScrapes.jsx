@@ -8,15 +8,15 @@ const BrandScrapes = () => {
     const [brandName, setBrandName] = useState('');
     const [pageInput, setPageInput] = useState('');
 
-    // Build full URL from page ID or extract from URL
+    // Build full URL from page ID, search query, or extract from URL
     const buildPageUrl = (input) => {
         const trimmed = input.trim();
         // If it's just numbers, treat as page ID
         if (/^\d+$/.test(trimmed)) {
             return `https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=all&view_all_page_id=${trimmed}`;
         }
-        // If it's a URL with view_all_page_id, use as-is
-        if (trimmed.includes('view_all_page_id=')) {
+        // If it's a valid FB Ads Library URL (with view_all_page_id OR search query), use as-is
+        if (trimmed.includes('facebook.com/ads/library') && (trimmed.includes('view_all_page_id=') || trimmed.includes('q='))) {
             return trimmed;
         }
         // Try to extract page ID from various FB URL formats
@@ -330,6 +330,25 @@ const BrandScrapes = () => {
 
                                                         {/* Ad Info */}
                                                         <div className="p-3">
+                                                            {ad.page_name && (
+                                                                <div className="flex items-center gap-1 mb-1">
+                                                                    <span className="text-xs font-medium text-indigo-600 truncate">
+                                                                        {ad.page_name}
+                                                                    </span>
+                                                                    {ad.page_link && (
+                                                                        <a
+                                                                            href={ad.page_link}
+                                                                            target="_blank"
+                                                                            rel="noopener noreferrer"
+                                                                            className="text-indigo-400 hover:text-indigo-600 flex-shrink-0"
+                                                                            onClick={(e) => e.stopPropagation()}
+                                                                            title="View all ads from this page"
+                                                                        >
+                                                                            <ExternalLink size={10} />
+                                                                        </a>
+                                                                    )}
+                                                                </div>
+                                                            )}
                                                             {ad.headline && (
                                                                 <p className="text-sm font-medium text-gray-900 line-clamp-2 mb-1">
                                                                     {ad.headline}
@@ -356,6 +375,7 @@ const BrandScrapes = () => {
                                                                         rel="noopener noreferrer"
                                                                         className="text-amber-600 hover:text-amber-800"
                                                                         onClick={(e) => e.stopPropagation()}
+                                                                        title="View ad in library"
                                                                     >
                                                                         <ExternalLink size={14} />
                                                                     </a>

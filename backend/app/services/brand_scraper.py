@@ -27,6 +27,17 @@ def parse_page_id_from_url(url: str) -> Optional[str]:
         return None
 
 
+def parse_search_query_from_url(url: str) -> Optional[str]:
+    """Extract search query (q=) from Facebook Ads Library URL."""
+    try:
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query)
+        query = params.get('q', [None])[0]
+        return query
+    except Exception:
+        return None
+
+
 def sanitize_folder_name(name: str) -> str:
     """Sanitize brand name for use as R2 folder name."""
     # Remove special chars, replace spaces with underscores
@@ -99,12 +110,15 @@ class BrandScraperService:
             raise
 
     async def _fetch_page_ads(self, page_id: str, limit: int = 500, brand_name: str = None) -> List[dict]:
-        """Fetch all ads from a specific Facebook page."""
+        """Fetch all ads from a specific Facebook page or search query."""
         ads = []
 
-        if not self.access_token:
-            print("No Facebook access token, falling back to Playwright")
-            return await self._fallback_fetch_page_ads(page_id, limit, brand_name=brand_name)
+        # Check if page_id is actually a search query (non-numeric)
+        is_search_query = not page_id.isdigit()
+
+        if not self.access_token or is_search_query:
+            print(f"Using Playwright scraper for {'search query' if is_search_query else 'no token'}")
+            return await self._fallback_fetch_page_ads(page_id, limit, brand_name=brand_name, is_search=is_search_query)
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             after_cursor = None
@@ -146,7 +160,7 @@ class BrandScraperService:
 
         return ads
 
-    async def _fallback_fetch_page_ads(self, page_id: str, limit: int = 500, brand_name: str = None) -> List[dict]:
+    async def _fallback_fetch_page_ads(self, page_id: str, limit: int = 500, brand_name: str = None, is_search: bool = False) -> List[dict]:
         """Fallback to Playwright for scraping when API unavailable. Captures both images and videos."""
         from playwright.async_api import async_playwright
 
@@ -198,11 +212,15 @@ class BrandScraperService:
 
                 page.on('response', capture_media_response)
 
-                # Strategy: Search by brand name works better for video capture than page_id
-                # Videos autoplay in search results but not in page view
+                # Determine URL based on search type
                 import urllib.parse
 
-                if brand_name:
+                if is_search:
+                    # Use the search query directly
+                    search_query = urllib.parse.quote(page_id)  # page_id contains the search term
+                    url = f"https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=all&q={search_query}"
+                    print(f"Searching for '{page_id}'...")
+                elif brand_name:
                     # Search by brand name - videos autoplay in search results
                     search_query = urllib.parse.quote(brand_name)
                     url = f"https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&media_type=video&q={search_query}"
@@ -252,8 +270,8 @@ class BrandScraperService:
                                 if (before.length) brandName = before[before.length - 1].trim();
                             }
 
-                            // Extract headline and copy
-                            let headline = null, adCopy = null;
+                            // Extract headline, copy, and CTA
+                            let headline = null, adCopy = null, ctaText = null;
                             const lines = text.split('\\n').map(l => l.trim()).filter(l => l);
                             const sponsoredLine = lines.findIndex(l => l === 'Sponsored');
                             if (sponsoredLine >= 0) {
@@ -263,6 +281,22 @@ class BrandScraperService:
                                     else if (headline && lines[i].length > 10) adCopy = (adCopy || '') + lines[i] + ' ';
                                 }
                             }
+
+                            // Look for common CTA button texts
+                            const ctaPatterns = ['Learn More', 'Shop Now', 'Sign Up', 'Get Offer', 'Book Now', 'Contact Us', 'Download', 'Apply Now', 'Get Quote', 'Subscribe'];
+                            for (const cta of ctaPatterns) {
+                                if (text.includes(cta)) {
+                                    ctaText = cta;
+                                    break;
+                                }
+                            }
+
+                            // Try to find page link (view_all_page_id link)
+                            let pageId = null;
+                            div.querySelectorAll('a[href*="view_all_page_id"]').forEach(link => {
+                                const match = link.href.match(/view_all_page_id=(\\d+)/);
+                                if (match) pageId = match[1];
+                            });
 
                             // Get image URLs visible in this ad container
                             const imageUrls = [];
@@ -279,8 +313,10 @@ class BrandScraperService:
                             results.push({
                                 id: libraryId,
                                 page_name: brandName,
+                                page_id: pageId,
                                 ad_creative_link_titles: headline ? [headline] : null,
                                 ad_creative_bodies: adCopy ? [adCopy.trim()] : null,
+                                ad_creative_link_captions: ctaText ? [ctaText] : null,
                                 _image_urls: imageUrls,
                                 _has_video: hasVideo
                             });
@@ -416,10 +452,19 @@ class BrandScraperService:
         if len(r2_urls) > 1 and media_type == "image":
             media_type = "carousel"
 
+        # Extract page info
+        page_name = ad_data.get("page_name")
+        page_id_from_ad = ad_data.get("page_id")
+        page_link = None
+        if page_id_from_ad:
+            page_link = f"https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=US&view_all_page_id={page_id_from_ad}"
+
         # Create record
         ad_record = BrandScrapedAd(
             brand_scrape_id=brand_scrape_id,
             external_id=ad_id,
+            page_name=page_name[:200] if page_name else None,
+            page_link=page_link,
             headline=headline[:500] if headline else None,
             ad_copy=ad_copy[:2000] if ad_copy else None,
             cta_text=cta_text[:200] if cta_text else None,

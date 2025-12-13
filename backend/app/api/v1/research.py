@@ -425,20 +425,22 @@ async def create_brand_scrape(
 ):
     """Create a new brand scrape and start scraping in background."""
     from app.models import BrandScrape
-    from app.services.brand_scraper import BrandScraperService, parse_page_id_from_url
+    from app.services.brand_scraper import BrandScraperService, parse_page_id_from_url, parse_search_query_from_url
 
-    # Parse page ID from URL
+    # Parse page ID or search query from URL
     page_id = parse_page_id_from_url(request.page_url)
-    if not page_id:
+    search_query = parse_search_query_from_url(request.page_url)
+
+    if not page_id and not search_query:
         raise HTTPException(
             status_code=400,
-            detail="Invalid URL. Must be a Facebook Ads Library URL with view_all_page_id parameter."
+            detail="Invalid URL. Must be a Facebook Ads Library URL with view_all_page_id or q= parameter."
         )
 
     # Create brand scrape record
     brand_scrape = BrandScrape(
         brand_name=request.brand_name,
-        page_id=page_id,
+        page_id=page_id or search_query,  # Use search query as identifier if no page_id
         page_url=request.page_url,
         status="pending"
     )

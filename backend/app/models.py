@@ -464,6 +464,8 @@ class BrandScrapedAd(Base):
     id = Column(String, primary_key=True, default=generate_uuid)
     brand_scrape_id = Column(String, ForeignKey('brand_scrapes.id', ondelete='CASCADE'), nullable=False)
     external_id = Column(String, nullable=False, index=True)  # FB ad library ID
+    page_name = Column(String, nullable=True)  # Facebook page name
+    page_link = Column(String, nullable=True)  # Link to page's ads in library
     headline = Column(String, nullable=True)
     ad_copy = Column(Text, nullable=True)
     cta_text = Column(String, nullable=True)
