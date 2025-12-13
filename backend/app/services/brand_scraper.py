@@ -116,9 +116,9 @@ class BrandScraperService:
         # Check if page_id is actually a search query (non-numeric)
         is_search_query = not page_id.isdigit()
 
-        if not self.access_token or is_search_query:
-            print(f"Using Playwright scraper for {'search query' if is_search_query else 'no token'}")
-            return await self._fallback_fetch_page_ads(page_id, limit, brand_name=brand_name, is_search=is_search_query)
+        if not self.access_token:
+            print("No Facebook access token available")
+            raise Exception("Facebook access token not configured. Please set FACEBOOK_ADS_LIBRARY_TOKEN or VITE_FACEBOOK_ACCESS_TOKEN.")
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             after_cursor = None
@@ -126,12 +126,19 @@ class BrandScraperService:
             while len(ads) < limit:
                 params = {
                     "access_token": self.access_token,
-                    "search_page_ids": page_id,
                     "ad_active_status": "ALL",
                     "ad_reached_countries": "US",
                     "limit": min(300, limit - len(ads)),
-                    "fields": "id,ad_creative_bodies,ad_creative_link_titles,ad_creative_link_captions,ad_snapshot_url,page_name,publisher_platforms,ad_delivery_start_time"
+                    "fields": "id,ad_creative_bodies,ad_creative_link_titles,ad_creative_link_captions,ad_snapshot_url,page_id,page_name,publisher_platforms,ad_delivery_start_time"
                 }
+
+                # Use search_terms for keyword search, search_page_ids for page-specific
+                if is_search_query:
+                    params["search_terms"] = page_id
+                    print(f"Searching for ads with term: {page_id}")
+                else:
+                    params["search_page_ids"] = page_id
+                    print(f"Fetching ads for page: {page_id}")
 
                 if after_cursor:
                     params["after"] = after_cursor
@@ -156,7 +163,7 @@ class BrandScraperService:
 
                 except Exception as e:
                     print(f"API error: {e}")
-                    break
+                    raise
 
         return ads
 
