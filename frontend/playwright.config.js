@@ -1,5 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// Support testing against production via BASE_URL env var
+const baseURL = process.env.BASE_URL || 'http://localhost:5173';
+
 export default defineConfig({
   testDir: './tests',
   fullyParallel: true,
@@ -7,8 +10,9 @@ export default defineConfig({
   retries: process.env.CI ? 2 : 0,
   workers: process.env.CI ? 1 : undefined,
   reporter: 'html',
+  timeout: 30000,
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL,
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
@@ -22,9 +26,10 @@ export default defineConfig({
       },
     },
   ],
-  webServer: {
+  // Only start local server if testing against localhost
+  webServer: baseURL.includes('localhost') ? {
     command: 'npm run dev',
     url: 'http://localhost:5173',
     reuseExistingServer: !process.env.CI,
-  },
+  } : undefined,
 });
