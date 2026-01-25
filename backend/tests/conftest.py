@@ -16,14 +16,10 @@ from app.core.security import get_password_hash
 from app.core.config import settings
 
 # Use DATABASE_URL from env (CI sets this to localhost postgres)
-# Fallback to dev database for local development
-TEST_DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    os.getenv(
-        "TEST_DATABASE_URL",
-        "postgresql://postgres:***REDACTED***@***REDACTED***/railway"
-    )
-)
+# No fallback - DATABASE_URL must be set
+TEST_DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("TEST_DATABASE_URL")
+if not TEST_DATABASE_URL:
+    raise ValueError("DATABASE_URL or TEST_DATABASE_URL environment variable required for tests")
 engine = create_engine(TEST_DATABASE_URL)
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

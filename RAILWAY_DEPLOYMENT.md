@@ -1,6 +1,6 @@
 # Railway Deployment Guide
 
-This guide will walk you through deploying the Video Ad Builder application to Railway.
+This guide walks you through deploying the Facebook Ad Builder to Railway.
 
 ## Overview
 
@@ -21,7 +21,7 @@ Railway will host:
 2. Click **"New Project"**
 3. Select **"Deploy from GitHub repo"**
 4. Authorize Railway to access your GitHub account
-5. Select your `breadWinner.com` repository
+5. Select your repository
 
 ## Step 2: Add PostgreSQL Database
 

@@ -15,7 +15,7 @@ class Settings:
         raise ValueError(
             "DATABASE_URL environment variable is required. "
             "Please set it to your PostgreSQL connection string.\n"
-            "Example: postgresql://user:password@localhost:5432/video_ad_builder"
+            "Example: postgresql://user:password@localhost:5432/facebook_ad_builder"
         )
     
     # Validate that it's PostgreSQL
@@ -32,18 +32,24 @@ class Settings:
     KIE_AI_API_KEY: str = os.getenv("KIE_AI_API_KEY", "")
     FACEBOOK_ACCESS_TOKEN: str = os.getenv("FACEBOOK_ACCESS_TOKEN", "")
 
-    # Auth settings
-    SECRET_KEY: str = os.getenv("SECRET_KEY", "your-secret-key-change-in-production")
+    # Auth settings - SECRET_KEY is required
+    SECRET_KEY: str = os.getenv("SECRET_KEY", "")
+    if not SECRET_KEY or SECRET_KEY == "your-secret-key-change-in-production":
+        raise ValueError(
+            "SECRET_KEY environment variable is required for security.\n"
+            "Generate one with: python -c \"import secrets; print(secrets.token_urlsafe(32))\""
+        )
+
     ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "10080"))  # 7 days
-    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "365"))  # 1 year
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))  # 30 minutes
+    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))  # 7 days
 
     # Cloudflare R2 Storage (S3-compatible)
     R2_ACCOUNT_ID: str = os.getenv("R2_ACCOUNT_ID", "")
     R2_ACCESS_KEY_ID: str = os.getenv("R2_ACCESS_KEY_ID", "")
     R2_SECRET_ACCESS_KEY: str = os.getenv("R2_SECRET_ACCESS_KEY", "")
-    R2_BUCKET_NAME: str = os.getenv("R2_BUCKET_NAME", "breadwinner")
-    R2_PUBLIC_URL: str = os.getenv("R2_PUBLIC_URL", "https://pub-fb089822c800422ea1e06580d27b3751.r2.dev")
+    R2_BUCKET_NAME: str = os.getenv("R2_BUCKET_NAME", "")
+    R2_PUBLIC_URL: str = os.getenv("R2_PUBLIC_URL", "")
 
     @property
     def r2_enabled(self) -> bool:

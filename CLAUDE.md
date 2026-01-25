@@ -2,6 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Startup Checks
+
+On load, verify required tools are installed:
+
+```bash
+# Check agent-browser (required for e2e testing)
+command -v agent-browser >/dev/null || echo "WARNING: agent-browser not installed. Run: npm install -g agent-browser && agent-browser install"
+```
+
 ## Project Overview
 
 Facebook Ad Automation App - A full-stack application for automating the lifecycle of Facebook video and image ads, from competitor research to ad creation, launching, and performance reporting.
@@ -11,13 +20,8 @@ Facebook Ad Automation App - A full-stack application for automating the lifecyc
 - Backend: Python FastAPI (Python 3.11+)
 - Database: PostgreSQL on Railway
 - Storage: Cloudflare R2 (S3-compatible)
+- Testing: agent-browser (e2e), Vitest (unit)
 - Hosting: Railway (backend + frontend + database)
-- Domain: breadwinner.a4d.com
-
-**Production URLs:**
-- Frontend: https://breadwinner.a4d.com
-- Backend API: https://ad-builder-backend-production.up.railway.app
-- API Docs: https://ad-builder-backend-production.up.railway.app/api/v1/docs
 
 ## Development Commands
 
@@ -236,7 +240,7 @@ DATABASE_URL=postgresql://postgres:xxx@host.proxy.rlwy.net:port/railway
 R2_ACCOUNT_ID=...
 R2_ACCESS_KEY_ID=...
 R2_SECRET_ACCESS_KEY=...
-R2_BUCKET_NAME=breadwinner
+R2_BUCKET_NAME=your-bucket
 R2_PUBLIC_URL=https://pub-xxx.r2.dev
 
 # AI Services
@@ -285,7 +289,7 @@ SECRET_KEY=...  # Generate with: python -c "import secrets; print(secrets.token_
 
 ## Security Notes
 
-- CORS restricted to specific origins (localhost, Railway, breadwinner.a4d.com)
+- CORS restricted to specific origins (configure via ALLOWED_ORIGINS env var)
 - JWT-based authentication implemented (access + refresh tokens)
 - File uploads limited to images (jpg, jpeg, png, gif, webp), 10MB max
 - All secrets stored in environment variables (never committed)
@@ -309,52 +313,55 @@ SECRET_KEY=...  # Generate with: python -c "import secrets; print(secrets.token_
 1. Backend auto-deploys from `main` branch via Dockerfile
 2. Frontend auto-deploys from `main` branch via Nixpacks
 3. Database is Railway PostgreSQL service
-4. Custom domain: breadwinner.a4d.com → CNAME to Railway
+4. Custom domain → CNAME to Railway
 
-**IMPORTANT - Post-Deploy Verification:**
-After every `git push` to main, ALWAYS verify the deployment succeeded:
+**Post-Deploy Verification:**
 ```bash
-# Wait ~30-60s for Railway to rebuild, then check logs
-railway logs --tail 30
+railway logs --tail 30  # Look for "Uvicorn running on http://0.0.0.0:8080"
 ```
-Look for: "Uvicorn running on http://0.0.0.0:8080" = success
-Watch for: ModuleNotFoundError, KeyError in migrations, or crash loops
 
 **MANDATORY - Feature Testing After Deployment:**
 For ANY new feature deployment, run ALL applicable tests:
 
-1. **Smoke Tests** (always required):
+1. **Smoke Tests** (agent-browser):
 ```bash
 cd frontend
-BASE_URL=https://breadwinner.a4d.com TEST_EMAIL=jasona@a4d.com TEST_PASSWORD='<password>' \
-  npx playwright test tests/smoke/<feature>.spec.js --reporter=list
+BASE_URL=https://your-app.com npm run test:smoke
+
+# Or run individual tests:
+BASE_URL=https://your-app.com npm run test:login
+TEST_EMAIL=user@example.com TEST_PASSWORD=xxx npm run test:auth
 ```
 
-2. **E2E Tests** (for user flows):
-```bash
-npx playwright test tests/e2e/<feature>.spec.js --headed
-```
-
-3. **Unit Tests** (for backend logic):
+2. **Unit Tests** (backend):
 ```bash
 cd backend
 pytest tests/test_<feature>.py -v
 ```
 
+3. **Unit Tests** (frontend):
+```bash
+cd frontend
+npm run test:unit
+```
+
 **Test file locations:**
-- Frontend smoke: `frontend/tests/smoke/*.spec.js`
-- Frontend e2e: `frontend/tests/e2e/*.spec.js`
+- Frontend e2e: `frontend/tests/agent-browser/*.sh`
+- Frontend unit: `frontend/src/**/*.test.js`
 - Backend unit: `backend/tests/test_*.py`
 
-**For new features, MUST create:**
-- Smoke test: page loads, nav works, basic form validation
-- E2E test: full user flow (create, read, update, delete)
-- Unit test: service/API logic (backend)
-
-Never consider a feature "done" until all tests pass against production URL.
+**agent-browser Quick Reference:**
+```bash
+agent-browser open <url>          # Open URL
+agent-browser snapshot            # Get accessibility tree
+agent-browser click '<selector>'  # Click element
+agent-browser fill '<sel>' 'val'  # Fill input
+agent-browser screenshot /tmp/x.png
+agent-browser close               # Close browser
+```
 
 **Cloudflare R2 Setup:**
-- Bucket: `breadwinner`
+- Bucket: configured via R2_BUCKET_NAME
 - Public access enabled via R2.dev URL
 - CORS configured to allow frontend origins
 

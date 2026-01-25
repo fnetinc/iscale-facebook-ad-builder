@@ -53,3 +53,5 @@ backend/uploads/*.webp
 
 # Backups
 *.sql
+.vercel
+.env*.local

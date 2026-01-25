@@ -145,9 +145,12 @@ if __name__ == "__main__":
     print("\nSeeding roles and permissions...")
     seed_roles_and_permissions()
 
-    # Optionally create a default superuser
+    # Optionally create a default superuser (requires env vars)
     import os
-    admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
-    admin_password = os.getenv("ADMIN_PASSWORD", "changeme123")
-    print(f"\nCreating superuser ({admin_email})...")
-    create_superuser(admin_email, admin_password)
+    admin_email = os.getenv("ADMIN_EMAIL")
+    admin_password = os.getenv("ADMIN_PASSWORD")
+    if admin_email and admin_password:
+        print(f"\nCreating superuser ({admin_email})...")
+        create_superuser(admin_email, admin_password)
+    else:
+        print("\nSkipping superuser creation (set ADMIN_EMAIL and ADMIN_PASSWORD to create one)")

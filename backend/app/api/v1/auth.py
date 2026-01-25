@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Form
+from fastapi import APIRouter, Depends, HTTPException, status, Form, Request
 from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 
 from app.database import get_db
+from app.core.rate_limit import limiter
 from app.models import User, RefreshToken, Role
 from app.core.security import (
     verify_password,
@@ -24,7 +25,9 @@ router = APIRouter()
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("3/minute")
 async def register(
+    request: Request,
     user_data: UserCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
@@ -65,7 +68,9 @@ async def register(
 
 
 @router.post("/login", response_model=Token)
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     username: str = Form(...),
     password: str = Form(...),
     db: Session = Depends(get_db)
@@ -106,7 +111,8 @@ async def login(
 
 
 @router.post("/login/json", response_model=Token)
-async def login_json(user_data: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+async def login_json(request: Request, user_data: UserLogin, db: Session = Depends(get_db)):
     """Login with JSON body and get access and refresh tokens"""
     user = db.query(User).filter(User.email == user_data.email).first()
 
@@ -143,7 +149,8 @@ async def login_json(user_data: UserLogin, db: Session = Depends(get_db)):
 
 
 @router.post("/refresh", response_model=Token)
-async def refresh_token(token_data: TokenRefresh, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+async def refresh_token(request: Request, token_data: TokenRefresh, db: Session = Depends(get_db)):
     """Get new access and refresh tokens using a refresh token (rolling refresh)"""
     # Find the refresh token
     refresh_token_obj = db.query(RefreshToken).filter(

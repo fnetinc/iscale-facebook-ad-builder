@@ -1,7 +1,6 @@
 name: Post-Deploy Verification
 
 on:
-  # Trigger after main branch deploy (Railway webhook or manual)
   workflow_dispatch:
     inputs:
       environment:
@@ -12,13 +11,8 @@ on:
         options:
           - production
           - staging
-  # Also run on push to main after giving Railway time to deploy
   push:
     branches: [main]
-
-env:
-  PROD_FRONTEND_URL: https://breadwinner.a4d.com
-  PROD_BACKEND_URL: https://ad-builder-backend-production.up.railway.app
 
 jobs:
   wait-for-deploy:
@@ -35,7 +29,7 @@ jobs:
         run: |
           echo "Checking backend health..."
           for i in {1..10}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ env.PROD_BACKEND_URL }}/api/v1/docs)
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ vars.BACKEND_URL }}/api/v1/docs)
             if [ "$STATUS" = "200" ]; then
               echo "Backend is healthy (HTTP 200)"
               exit 0
@@ -56,34 +50,20 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
 
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm ci
+      - name: Install agent-browser
+        run: |
+          npm install -g agent-browser
+          agent-browser install
 
-      - name: Install Playwright
+      - name: Run smoke tests
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
-
-      - name: Run smoke tests against production
-        working-directory: frontend
-        run: npx playwright test tests/smoke/ --reporter=list
+        run: bash tests/agent-browser/run-all.sh
         env:
           CI: true
-          BASE_URL: ${{ env.PROD_FRONTEND_URL }}
-          API_URL: ${{ env.PROD_BACKEND_URL }}
+          BASE_URL: ${{ vars.FRONTEND_URL }}
           TEST_EMAIL: ${{ secrets.TEST_EMAIL }}
           TEST_PASSWORD: ${{ secrets.TEST_PASSWORD }}
-
-      - name: Upload test results
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: smoke-test-report
-          path: frontend/playwright-report/
-          retention-days: 7
 
   notify-failure:
     needs: [backend-health, e2e-smoke-tests]
@@ -93,5 +73,3 @@ jobs:
       - name: Notify on failure
         run: |
           echo "::error::Post-deploy verification FAILED! Check the workflow logs."
-          echo "Backend URL: ${{ env.PROD_BACKEND_URL }}"
-          echo "Frontend URL: ${{ env.PROD_FRONTEND_URL }}"

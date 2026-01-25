@@ -1,8 +1,14 @@
-from fastapi import FastAPI
+import os
+import re
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import Response
 from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from app.core.config import settings
+from app.core.rate_limit import limiter
 
 app = FastAPI(
     title="Facebook Ad Automation API",
@@ -11,22 +17,44 @@ app = FastAPI(
     docs_url="/api/v1/docs",
 )
 
-# Trust proxy headers (Railway uses reverse proxy)
-app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=["*"])
+# Register rate limiter
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# CORS Middleware
+# Security headers middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response: Response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    if request.url.scheme == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+# Trust proxy headers (Railway uses reverse proxy)
+# In production, consider restricting to specific CIDR ranges
+trusted_proxies = os.getenv("TRUSTED_PROXIES", "*")
+app.add_middleware(ProxyHeadersMiddleware, trusted_hosts=[trusted_proxies] if trusted_proxies != "*" else ["*"])
+
+# CORS origins from env var or defaults
+default_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+]
+extra_origins = os.getenv("ALLOWED_ORIGINS", "").split(",")
+allowed_origins = default_origins + [o.strip() for o in extra_origins if o.strip()]
+
+# CORS Middleware - explicit methods and headers
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "https://ad-builder-frontend-production.up.railway.app",
-        "https://breadwinner-frontend-development.up.railway.app",
-        "https://breadwinner.a4d.com",
-    ],
+    allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Requested-With"],
+    expose_headers=["X-Total-Count"],
+    max_age=600,
 )
 
 @app.get("/")
@@ -51,8 +79,10 @@ async def startup_event():
             print(f"✅ Connected to PostgreSQL")
             print(f"   Version: {version}")
     except Exception as e:
+        # Sanitize DATABASE_URL - hide password
+        sanitized_url = re.sub(r'://[^:]+:[^@]+@', '://***:***@', settings.DATABASE_URL)
         print(f"❌ Failed to connect to database: {e}")
-        print(f"   DATABASE_URL: {settings.DATABASE_URL[:50]}...")
+        print(f"   DATABASE_URL: {sanitized_url}")
         raise RuntimeError(f"Database connection failed: {e}")
 
 
