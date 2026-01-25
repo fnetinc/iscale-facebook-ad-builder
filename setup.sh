@@ -3,6 +3,11 @@
 # Facebook Ad Builder - Interactive Setup Script
 # This script walks you through setting up the application
 #
+# Created by Jason Akatiff
+# iSCALE.com | A4D.com
+# Telegram: @jasonakatiff
+# Email: jason@jasonakatiff.com
+#
 
 set -e
 

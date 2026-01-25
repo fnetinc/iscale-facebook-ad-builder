@@ -1,3 +1,12 @@
+/**
+ * Facebook Ad Builder - Frontend
+ *
+ * Created by Jason Akatiff
+ * iSCALE.com | A4D.com
+ * Telegram: @jasonakatiff
+ * Email: jason@jasonakatiff.com
+ */
+
 import React from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';

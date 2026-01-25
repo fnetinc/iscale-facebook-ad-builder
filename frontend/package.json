@@ -1,7 +1,10 @@
 {
   "name": "facebook_ad_builder",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
+  "description": "AI-powered Facebook ad automation platform",
+  "author": "Jason Akatiff <jason@jasonakatiff.com> (https://iscale.com)",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "vite",

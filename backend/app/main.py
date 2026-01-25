@@ -1,3 +1,12 @@
+"""
+Facebook Ad Builder - Backend API
+
+Created by Jason Akatiff
+iSCALE.com | A4D.com
+Telegram: @jasonakatiff
+Email: jason@jasonakatiff.com
+"""
+
 import os
 import re
 from fastapi import FastAPI, Request
