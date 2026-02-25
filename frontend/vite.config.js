@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  define: {
+    'import.meta.env.VITE_API_URL': JSON.stringify('https://iscale-facebook-ad-builder-production.up.railway.app/api/v1'),
+  },
   preview: {
     allowedHosts: ['industrious-enchantment-production-b765.up.railway.app'],
   },
@@ -10,12 +13,12 @@ export default defineConfig({
     allowedHosts: ['industrious-enchantment-production-b765.up.railway.app'],
     proxy: {
       '/api': {
-        target: process.env.VITE_API_URL || 'http://localhost:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       },
       '/uploads': {
-        target: process.env.VITE_API_URL || 'http://localhost:8000',
+        target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       }
