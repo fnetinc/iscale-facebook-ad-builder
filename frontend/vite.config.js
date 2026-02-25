@@ -22,12 +22,3 @@ export default defineConfig({
     }
   }
 })
-```
-
-Commit that to `main`, Railway redeploys, and the login should be able to hit the backend.
-
----
-
-**One more thing** — also add this to your **backend service → Variables** if it's not there already:
-```
-ALLOWED_ORIGINS=https://industrious-enchantment-production-b765.up.railway.app
