@@ -1,10 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vite.dev/config/
-// SECURITY WARNING: Never expose API keys via import.meta.env.VITE_*
-// API calls should be made from a backend server, not the frontend
-
 export default defineConfig({
   plugins: [react()],
   preview: {
@@ -14,15 +10,24 @@ export default defineConfig({
     allowedHosts: ['industrious-enchantment-production-b765.up.railway.app'],
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: process.env.VITE_API_URL || 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       },
       '/uploads': {
-        target: 'http://localhost:8000',
+        target: process.env.VITE_API_URL || 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
       }
     }
   }
 })
+```
+
+Commit that to `main`, Railway redeploys, and the login should be able to hit the backend.
+
+---
+
+**One more thing** — also add this to your **backend service → Variables** if it's not there already:
+```
+ALLOWED_ORIGINS=https://industrious-enchantment-production-b765.up.railway.app
